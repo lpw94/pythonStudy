@@ -2,6 +2,8 @@
 
 每个函数就是一个测试用例；fixture `temp_ledger` 由 conftest.py 提供。
 """
+import csv
+
 from ledger.models import TxType
 from ledger.service import LedgerService
 
@@ -57,3 +59,16 @@ def test_by_category_with_type(temp_ledger: LedgerService) -> None:
     assert temp_ledger.by_category(TxType.INCOME) == {"工资": 100}
     # 只统计支出
     assert temp_ledger.by_category(TxType.EXPENSE)["餐饮"] == 50
+
+
+def test_export_csv(temp_ledger: LedgerService, tmp_path) -> None:
+    temp_ledger.add(100, TxType.INCOME, "工资", "十月")
+    temp_ledger.add(38.5, TxType.EXPENSE, "餐饮")
+    out = tmp_path / "out.csv"
+    n = temp_ledger.export_csv(out)
+    assert n == 2
+    # 读回校验：用 csv 模块解析刚导出的文件
+    rows = list(csv.reader(out.read_text(encoding="utf-8-sig").splitlines()))
+    assert rows[0] == ["id", "日期", "类型", "金额", "分类", "备注"]
+    assert len(rows) == 3  # 表头 + 2 条数据
+    assert rows[1][4] == "工资"

@@ -118,6 +118,17 @@ def clear(
     console.print(f"[red]已清空[/red] {n} 条记录")
 
 
+@app.command()
+def export(
+    path: Path = typer.Option(
+        Path("transactions.csv"), "--output", "-o", help="导出文件路径（默认 transactions.csv）"
+    ),
+) -> None:
+    """导出全部记录为 CSV 文件（Excel 可直接打开）。"""
+    n = service.export_csv(path)
+    console.print(f"[green]已导出[/green] {n} 条记录 → {path}")
+
+
 def cli() -> None:
     """控制台脚本入口（pyproject 的 [project.scripts] 指向这里）。"""
     app()

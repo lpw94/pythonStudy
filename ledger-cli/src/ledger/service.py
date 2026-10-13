@@ -8,8 +8,10 @@
 """
 from __future__ import annotations
 
+import csv
 import uuid
 from collections import defaultdict
+from pathlib import Path
 
 from .models import Transaction, TxType
 from .storage import Storage
@@ -89,3 +91,25 @@ class LedgerService:
             if tx_type is None or t.type == tx_type:
                 totals[t.category] += t.amount
         return dict(totals)
+
+    def export_csv(self, path: Path) -> int:
+        """把全部记录导出为 CSV 文件，返回写入条数。
+
+        newline="" 是 csv 模块要求（避免 Windows 下多出空行）；
+        encoding="utf-8-sig" 写 BOM，让 Excel 打开中文不乱码
+        （对标前端导出 CSV 时手动加 \\ufeff）。
+        """
+        txs = self.all()
+        with path.open("w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            writer.writerow(["id", "日期", "类型", "金额", "分类", "备注"])
+            for t in txs:
+                writer.writerow([
+                    t.id,
+                    t.created_at.isoformat(),
+                    t.type.value,
+                    f"{t.amount:.2f}",
+                    t.category,
+                    t.note,
+                ])
+        return len(txs)
