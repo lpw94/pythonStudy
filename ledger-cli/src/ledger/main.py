@@ -129,6 +129,24 @@ def export(
     console.print(f"[green]已导出[/green] {n} 条记录 → {path}")
 
 
+@app.command()
+def monthly() -> None:
+    """按月汇总收入 / 支出 / 结余，按月份升序。"""
+    data = service.monthly_summary()
+    if not data:
+        console.print("[yellow]还没有记录[/yellow]")
+        return
+    table = Table(show_header=True, header_style="bold")
+    for col in ["月份", "收入", "支出", "结余"]:
+        table.add_column(col)
+    for month, vals in data.items():
+        income = vals["income"]
+        expense = vals["expense"]
+        # 结余 = 收入 - 支出；:.2f 对标 toFixed(2)
+        table.add_row(month, f"{income:.2f}", f"{expense:.2f}", f"{income - expense:.2f}")
+    console.print(table)
+
+
 def cli() -> None:
     """控制台脚本入口（pyproject 的 [project.scripts] 指向这里）。"""
     app()

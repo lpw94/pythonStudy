@@ -113,3 +113,18 @@ class LedgerService:
                     t.note,
                 ])
         return len(txs)
+
+    def monthly_summary(self) -> dict[str, dict[str, float]]:
+        """按月 + 按类型汇总，返回 { '2026-10': {'income': x, 'expense': y}, ... }。
+
+        嵌套 defaultdict：外层 key 是月份，内层是新 dict（income/expense 默认 0.0）。
+        sorted(...) 让结果按月份升序，便于阅读。
+        """
+        result: dict[str, dict[str, float]] = defaultdict(
+            lambda: {"income": 0.0, "expense": 0.0}
+        )
+        for t in self.all():
+            month = t.created_at.strftime("%Y-%m")  # date -> "2026-10"
+            key = "income" if t.type == TxType.INCOME else "expense"
+            result[month][key] += t.amount
+        return dict(sorted(result.items()))
