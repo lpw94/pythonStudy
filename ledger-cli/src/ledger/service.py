@@ -50,6 +50,13 @@ class LedgerService:
         self.storage.save(kept)
         return True
 
+    def clear(self) -> int:
+        """清空全部记录，返回被清掉的条数。"""
+        records = self.storage.load()
+        count = len(records)
+        self.storage.save([])
+        return count
+
     def all(self) -> list[Transaction]:
         """返回全部记录（已反序列化成 Transaction 对象）。"""
         return [Transaction.from_dict(r) for r in self.storage.load()]
@@ -71,14 +78,14 @@ class LedgerService:
             "count": len(txs),
         }
 
-    def by_category(self) -> dict[str, float]:
-        """按分类聚合支出。
+    def by_category(self, tx_type: TxType | None = None) -> dict[str, float]:
+        """按分类聚合金额。
 
-        defaultdict(float) = 「不存在的 key 自动给 0.0」
-        对标前端手动 `acc[cat] = (acc[cat]||0)+amt`。
+        tx_type=None 时统计全部；否则只统计指定类型（income/expense）。
+        defaultdict(float)：key 不存在自动给 0.0，对标 acc[cat]=(acc[cat]||0)+amt。
         """
         totals: dict[str, float] = defaultdict(float)
         for t in self.all():
-            if t.type == TxType.EXPENSE:
+            if tx_type is None or t.type == tx_type:
                 totals[t.category] += t.amount
         return dict(totals)

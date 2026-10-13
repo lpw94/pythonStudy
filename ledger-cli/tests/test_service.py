@@ -36,3 +36,24 @@ def test_by_category(temp_ledger: LedgerService) -> None:
     cats = temp_ledger.by_category()
     assert cats["餐饮"] == 50
     assert cats["交通"] == 10
+
+
+def test_clear(temp_ledger: LedgerService) -> None:
+    temp_ledger.add(100, TxType.INCOME, "工资")
+    temp_ledger.add(30, TxType.EXPENSE, "餐饮")
+    assert len(temp_ledger.all()) == 2
+    n = temp_ledger.clear()
+    assert n == 2
+    assert temp_ledger.all() == []
+
+
+def test_by_category_with_type(temp_ledger: LedgerService) -> None:
+    temp_ledger.add(100, TxType.INCOME, "工资")
+    temp_ledger.add(30, TxType.EXPENSE, "餐饮")
+    temp_ledger.add(20, TxType.EXPENSE, "餐饮")
+    # 不传类型 = 全部
+    assert temp_ledger.by_category()["餐饮"] == 50
+    # 只统计收入
+    assert temp_ledger.by_category(TxType.INCOME) == {"工资": 100}
+    # 只统计支出
+    assert temp_ledger.by_category(TxType.EXPENSE)["餐饮"] == 50

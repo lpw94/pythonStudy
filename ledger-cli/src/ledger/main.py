@@ -84,19 +84,38 @@ def summary() -> None:
 
 
 @app.command()
-def report() -> None:
-    """按分类统计支出，从高到低排序。"""
-    data = service.by_category()
+def report(
+    type: TxType | None = typer.Option(
+        None, "--type", "-t", help="income / expense；不填则默认按支出统计"
+    ),
+) -> None:
+    """按分类统计金额，从高到低排序。可用 -t 按类型过滤。"""
+    # 不传 -t 时保持原默认行为：只统计支出
+    tx_type = type if type is not None else TxType.EXPENSE
+    data = service.by_category(tx_type)
     if not data:
-        console.print("[yellow]暂无支出记录[/yellow]")
+        console.print("[yellow]暂无记录[/yellow]")
         return
+    label = type.value if type else "支出"
     table = Table(show_header=True, header_style="bold")
     table.add_column("分类")
-    table.add_column("支出")
+    table.add_column(label)
     # sorted(..., key=..., reverse=True)：按金额降序；lambda kv: kv[1] 取 value
     for cat, amt in sorted(data.items(), key=lambda kv: kv[1], reverse=True):
         table.add_row(cat, f"{amt:.2f}")
     console.print(table)
+
+
+@app.command()
+def clear(
+    yes: bool = typer.Option(False, "--yes", "-y", help="跳过确认直接清空"),
+) -> None:
+    """清空账本全部记录（不可恢复）。"""
+    if not yes and not typer.confirm("确定要清空全部记录吗？此操作不可恢复"):
+        console.print("[yellow]已取消[/yellow]")
+        raise typer.Exit()
+    n = service.clear()
+    console.print(f"[red]已清空[/red] {n} 条记录")
 
 
 def cli() -> None:
