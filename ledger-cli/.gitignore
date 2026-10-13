@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本地数据（记账记录，别提交）
+ledger.json
+.ledger/
+
+# 工具缓存
+.ruff_cache/
+.pytest_cache/

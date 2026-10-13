@@ -1,0 +1,16 @@
+# ===== WorkBuddy 本地项目数据（不提交到远程） =====
+.workbuddy/
+
+# ===== Python 通用 =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ===== 本地数据 / 环境变量 =====
+*.log
+.env
+.env.*
