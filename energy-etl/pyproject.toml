@@ -1,0 +1,46 @@
+[project]
+name = "energy-etl"
+version = "0.1.0"
+description = "阶段2 Python 练习：大屏四类能源 Excel 导入 ETL（对标 hourlyData.js / yearData.js）"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",        # 数据分析/聚合，对标前端没有的强项
+    "openpyxl>=3.1",      # 读写 .xlsx（pandas 读 Excel 的引擎）
+    "httpx>=0.27",        # 异步 HTTP 客户端，拉远程数据（对标 node fetch/axios）
+    "schedule>=1.2",      # 轻量定时任务（对标 hourlyData 的 scheduleMorning/Afternoon）
+    "pydantic-settings>=2.5",  # 配置管理（.env + 类型校验），对标 dotenv + 强类型
+    "typer>=0.15",        # CLI 框架，装饰器即路由
+    "rich>=13",           # 终端美化输出
+]
+
+# 安装后可直接敲 `energy-etl` 命令
+[project.scripts]
+energy-etl = "energy_etl.main:cli"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",   # lint + format 一体，对标 ESLint + Prettier
+    "pytest>=8.3", # 测试框架，fixture 机制对标 Jest
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/energy_etl"]
+
+# ---- Ruff 配置 ----
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# B008: Typer 用 typer.Option(...) 作默认值属正常写法，官方建议忽略
+# UP042: 保留 (str, Enum) 写法以保证教学清晰度
+ignore = ["B008", "UP042"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
