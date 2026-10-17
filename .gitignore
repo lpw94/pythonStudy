@@ -6,6 +6,8 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+# 免安装 embeddable Python（本地 3.12 专用环境，含 ddddocr/opencv，体积大不提交）
+.py312/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -13,5 +15,9 @@ venv/
 # ===== 本地数据 / 环境变量 =====
 *.log
 .env
+# 跟踪模板文件，忽略其它一切 .env.*（如 .env.local）
 .env.*
+!.env.example
 *.csv
+# 验证码图片为运行时产物
+**/img/*.jpg
