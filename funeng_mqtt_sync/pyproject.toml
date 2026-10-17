@@ -1,0 +1,39 @@
+[project]
+name = "funeng-mqtt-sync"
+version = "0.1.0"
+description = "富能水表数据同步到 MQTT（原 funeng_api_iemp/node/index.js 的 Python 移植）"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",   # 对标 axios / fetch
+    "paho-mqtt>=2.1",   # 对标 mqtt.js
+]
+
+[project.scripts]
+funeng-sync = "funeng_sync.main:main"
+
+# 本地离线验证码识别（可选）。注意：ddddocr 依赖 opencv-python，
+# Windows 上 opencv 只有 Python <= 3.12 的轮子，所以请用 .py312 环境安装：
+#   .py312/python.exe -m pip install ".[local-ocr]"
+[project.optional-dependencies]
+local-ocr = ["ddddocr>=1.6"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[tool.ruff.lint]
+# E=风格 F=未定义 I=import 排序 UP=现代化语法 B=易错写法
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/funeng_sync"]
