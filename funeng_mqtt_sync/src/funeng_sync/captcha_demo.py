@@ -1,6 +1,7 @@
 """下载配置里的验证码图片到本地，再用 ddddocr 本地识别并打印结果。
 
 流程：config.VERIFY_CODE_URL 下载图片 -> 存到 img/ -> ddddocr 识别 -> 打印结果。
+下载后会保留最近 keep 张图片（默认 10），更早的自动清理，方便人工批量对照。
 
 运行（用 3.12 环境）：
     E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.captcha_demo
@@ -33,8 +34,12 @@ def _get_ocr():
     return _ocr
 
 
-def download_captcha(url: str | None = None, save_dir: str | Path | None = None) -> Path:
-    """把配置里的验证码图片下载到本地，返回保存路径。"""
+def download_captcha(url: str | None = None, save_dir: str | Path | None = None, keep: int = 10) -> Path:
+    """把配置里的验证码图片下载到本地，返回保存路径。
+
+    keep：保留最近多少张（按修改时间），更早的会自动清理，避免目录无限膨胀，
+    同时保留近期的若干张供人工批量对照。设为 0 表示不清理。
+    """
     url = url or config.VERIFY_CODE_URL
     save_dir = Path(save_dir or config.IMG_DIR)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -53,10 +58,17 @@ def download_captcha(url: str | None = None, save_dir: str | Path | None = None)
     path = save_dir / f"captcha_{int(time.time() * 1000)}.jpg"
     path.write_bytes(resp.content)
 
-    # 只保留当前下载的这张：删除目录里的其他图片。
-    # 放在保存成功之后清理，避免下载失败把旧图也误删
-    for old in save_dir.iterdir():
-        if old.is_file() and old != path and old.suffix.lower() in _IMG_SUFFIXES:
+    # 清理：只保留最近 keep 张（按修改时间倒序），更早的删除。
+    # 放在保存成功之后，避免下载失败把旧图也误删；
+    # 这样既能防止 img/ 无限膨胀，又能留下近期若干张供人工批量对照。
+    if keep > 0:
+        imgs = sorted(
+            (p for p in save_dir.iterdir()
+             if p.is_file() and p.suffix.lower() in _IMG_SUFFIXES),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for old in imgs[keep:]:
             old.unlink(missing_ok=True)
 
     return path
