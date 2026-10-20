@@ -76,11 +76,20 @@ def test_export_csv(temp_ledger: LedgerService, tmp_path) -> None:
 
 
 def test_monthly_summary(temp_ledger: LedgerService) -> None:
-    # 直接构造含指定日期的记录，覆盖跨月 + 同月多笔
+    # 直接构造含指定日期的记录，覆盖跨月+ 同月多笔
     temp_ledger.storage.save([
-        Transaction(id="a", amount=100, type=TxType.INCOME, category="工资", created_at=date(2026, 10, 1)).to_dict(),
-        Transaction(id="b", amount=30, type=TxType.EXPENSE, category="餐饮", created_at=date(2026, 10, 15)).to_dict(),
-        Transaction(id="c", amount=50, type=TxType.INCOME, category="奖金", created_at=date(2026, 9, 20)).to_dict(),
+        Transaction(
+            id="a", amount=100, type=TxType.INCOME,
+            category="工资", created_at=date(2026, 10, 1),
+        ).to_dict(),
+        Transaction(
+            id="b", amount=30, type=TxType.EXPENSE,
+            category="餐饮", created_at=date(2026, 10, 15),
+        ).to_dict(),
+        Transaction(
+            id="c", amount=50, type=TxType.INCOME,
+            category="奖金", created_at=date(2026, 9, 20),
+        ).to_dict(),
     ])
     result = temp_ledger.monthly_summary()
     assert list(result.keys()) == ["2026-09", "2026-10"]  # 月份升序

@@ -17,7 +17,6 @@ import requests
 
 from funeng_sync import config
 
-
 # ddddocr 模型只加载一次（约 1~2 秒），后续复用
 _ocr = None
 
@@ -34,7 +33,9 @@ def _get_ocr():
     return _ocr
 
 
-def download_captcha(url: str | None = None, save_dir: str | Path | None = None, keep: int = 10) -> Path:
+def download_captcha(
+    url: str | None = None, save_dir: str | Path | None = None, keep: int = 10
+) -> Path:
     """把配置里的验证码图片下载到本地，返回保存路径。
 
     keep：保留最近多少张（按修改时间），更早的会自动清理，避免目录无限膨胀，

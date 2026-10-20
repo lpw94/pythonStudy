@@ -11,12 +11,15 @@ BoxAnnotator 画出来，证明它「模型无关」。
 依赖：opencv（.py312 已随 ddddocr 装好）+ supervision（需 pip install supervision）
 
 运行（用 3.12 环境，从任意目录跑都行）：
-    E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.supervision_demo img/1.jpeg
-    E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.supervision_demo 1.jpeg   # 只在 img/ 里找
-    E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.supervision_demo          # 自动取 img/ 第一张
+    PY=../.py312/python.exe      # 项目根的 embeddable 3.12
 
-路径解析规则见 resolve_img_path()：先按原样解析，找不到就回退到本项目 img/ 目录下同名文件，
-所以「从哪个目录启动」不影响结果；支持 jpg / jpeg / png / bmp / webp。
+    $PY -m funeng_sync.supervision_demo img/1.jpeg   # 指定图片
+    $PY -m funeng_sync.supervision_demo 1.jpeg        # 只在 img/ 里找同名
+    $PY -m funeng_sync.supervision_demo# 自动取 img/ 第一张
+
+路径解析规则见 resolve_img_path()：先按原样解析，找不到就回退到本项目 img/
+目录下同名文件，所以「从哪个目录启动」不影响结果。
+支持 jpg / jpeg / png / bmp / webp。
 """
 
 from __future__ import annotations
@@ -37,7 +40,9 @@ OUT_DIR = ROOT / "out"
 IMG_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
-def detect_regions(image: np.ndarray, max_boxes: int = 10, min_area_ratio: float = 0.01):
+def detect_regions(
+    image: np.ndarray, max_boxes: int = 10, min_area_ratio: float = 0.01
+):
     """用 OpenCV 轮廓检测模拟一个真实检测器：找图中较大的连通区域。
 
     返回 (x, y, w, h) 列表。真实项目里把这段换成 YOLO / Haar / 任何模型即可，
@@ -67,7 +72,9 @@ def to_detections(boxes) -> sv.Detections:
     return sv.Detections(xyxy=np.array(xyxy, dtype=np.float32))
 
 
-def annotate_and_save(image: np.ndarray, detections: sv.Detections, out_path: Path) -> Path:
+def annotate_and_save(
+    image: np.ndarray, detections: sv.Detections, out_path: Path
+) -> Path:
     """用 supervision 的 BoxAnnotator 画框 + LabelAnnotator 加标签，保存到 out/。"""
     box_annotator = sv.BoxAnnotator(color_lookup=sv.ColorLookup.INDEX)
     label_annotator = sv.LabelAnnotator(color_lookup=sv.ColorLookup.INDEX)
@@ -106,7 +113,11 @@ def demo_with_sample_boxes(image: np.ndarray, out_path: Path) -> Path:
 def _all_imgs() -> list[Path]:
     """列出 img/ 下所有图片（多后缀，按文件名排序，结果稳定）。"""
     return sorted(
-        (p for p in IMG_DIR.iterdir() if p.is_file() and p.suffix.lower() in IMG_SUFFIXES),
+        (
+            p
+            for p in IMG_DIR.iterdir()
+            if p.is_file() and p.suffix.lower() in IMG_SUFFIXES
+        ),
         key=lambda p: p.name,
     )
 
@@ -144,7 +155,8 @@ def main() -> None:
     if img_path is None:
         search = IMG_DIR if arg is None else (IMG_DIR / Path(arg).name)
         print(f"未找到图片：{arg if arg else search}")
-        print(f"已尝试：{Path(arg).resolve() if arg else '(未传参数)'}  ->  {search.resolve()}")
+        print(f"已尝试：{Path(arg).resolve() if arg else '(未传参数)'}")
+        print(f"           ->  {search.resolve()}")
         avail = _all_imgs()
         if avail:
             print(f"img/ 目录现有图片（{len(avail)} 张）：")

@@ -44,7 +44,8 @@ def main() -> None:
     # 不可变：重新赋值只是覆盖「本地名字」，不影响源模块
     local_name = APP_NAME
     local_name = "改了本地"
-    print("    本地改 APP_NAME 后，源模块仍是:", cfg.APP_NAME)
+    print("    本地变量现在是:", local_name)
+    print("    但源模块仍是  :", cfg.APP_NAME)
 
     # 可变：list.append 作用到同一对象，源模块也跟着变
     cfg.ALLOWED_CODES.append("new")

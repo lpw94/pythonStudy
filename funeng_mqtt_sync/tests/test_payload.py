@@ -1,5 +1,9 @@
-"""payload 构造的单元测试（对应 getData 里的 obj / payload 结构）。"""
-from funeng_sync.http_client import build_payload
+"""payload 构造的单元测试（对应 getData 里的 obj / payload 结构）。
+
+这两条用例锁的是「T_ 前缀」—— 少写一个字符后端会静默丢数据，
+是整个同步链路里最不容易发现的一类错，所以专门测。
+"""
+from funeng_sync.payload import build_payload
 
 
 def test_build_payload() -> None:

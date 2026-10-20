@@ -2,7 +2,32 @@
 
 把原 Node 脚本 `funeng_api_iemp/node/index.js` 移植成 Python：登录（验证码 OCR）→ 拉取水表小时数据 → 经 MQTT 上报。
 
-## 与原 JS 的对应关系
+## ⚠️ 当前状态：教学练手版（非完整同步脚本）
+
+**登录 / 取数 / MQTT 上报的主体流程已在 `0d0dca6` 裁掉**，本项目现在是「项目驱动学Python」阶段二的**练手载体**，只保留了这些可以脱网验证的部分：
+
+| 保留 | 说明 |
+|------|------|
+| `captcha_demo.py` | 下载验证码 + ddddocr 离线识别（不断生产网络也能看效果） |
+| `time_utils.py` | dayjs 等价的时间工具，纯函数，9 条单测覆盖 |
+| `payload.py` | 上报数据体的构造，纯函数，锁住 `T_` 前缀这个易错点 |
+| `demo_config.py` / `demo_import.py` / `demo_stdlib.py` | import 写法、标准库四件套的最小示例 |
+| `supervision_demo.py` | 计算机视觉练手（轮廓检测 + 画框） |
+| `config.py` | 配置结构与生产常量（**含敏感信息，勿外传**） |
+
+下面「与原 JS 的对应关系」及之后的部分保留了**完整版的移植记录**，作为阶段二的技术存档；其中 `http_client.py` / `mqtt_client.py` / `sync.py` / `main.py` 四个文件**目前并不存在**，要跑完整链路需先补回来。
+
+当前可执行的检查：
+
+```bash
+.venv/Scripts/python.exe -m pytest tests -q                    # 9 passed
+.venv/Scripts/python.exe -m ruff check src scripts tests       # All checks passed
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.demo_import
+```
+
+---
+
+## 与原 JS 的对应关系（完整版存档）
 
 | 原 JS | Python |
 |------|--------|
@@ -17,14 +42,20 @@
 
 ```
 src/funeng_sync/
-├── config.py        # 全局常量（host/topic/MQTT/账号/设备列表/OCR/重试策略）
-├── time_utils.py    # 毫秒、起止日、整点判断（dayjs 等价）
-├── http_client.py   # 下载验证码 / 百度 OCR / 本地 ddddocr / 登录 / 拉数据 / payload
-├── mqtt_client.py   # paho 连接与发布
-├── sync.py          # 登录流程 + 取数发布 + 主循环
-└── main.py          # 入口
+├── config.py           # 全局常量（host/topic/MQTT/账号/设备列表/OCR/重试策略）
+├── time_utils.py       # 毫秒、起止日、整点判断（dayjs 等价）✅ 保留
+├── payload.py          # 上报数据体构造 ✅ 保留（原来是 http_client.py 的一部分）
+├── captcha_demo.py     # 验证码下载 + ddddocr 识别 ✅ 保留
+├── demo_config.py      # import 演示的被导入方
+├── demo_import.py      # import 三种写法演示
+├── demo_stdlib.py      # requests/json/datetime/pathlib 四件套演示
+├── supervision_demo.py # 轮廓检测 + supervision 画框
+├── mqtt_client.py      # ❌ 已删（paho 连接与发布）
+├── sync.py             # ❌ 已删（登录流程 + 取数发布 + 主循环）
+└── main.py             # ❌ 已删（入口）
 
-scripts/check_ocr.py # OCR 自检（单独验证验证码识别环节）
+scripts/check_ocr.py    # OCR 自检（单独验证验证码识别环节）
+tests/                  # time_utils 与 payload 的单测，共 9 条
 ```
 
 ## 运行环境（重要）

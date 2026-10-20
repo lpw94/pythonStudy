@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -26,7 +26,7 @@ IMG_DIR = Path(__file__).resolve().parent.parent.parent / "img"
 
 def now_ms() -> int:
     """① datetime：生成 UTC 毫秒时间戳（常用于验证码防缓存戳）。"""
-    return int(datetime.now(timezone.utc).timestamp() * 1000)
+    return int(datetime.now(UTC).timestamp() * 1000)
 
 
 def fetch_captcha(session: requests.Session, ts_ms: int) -> bytes | None:
