@@ -19,5 +19,8 @@ venv/
 .env.*
 !.env.example
 *.csv
-# 验证码图片为运行时产物
-**/img/*.jpg
+# 验证码/测试图片为运行时产物（含 jpg/jpeg/png 等所有后缀）
+**/img/
+# supervision_demo 等运行产物（画框结果）
+**/out/*.jpg
+out/
