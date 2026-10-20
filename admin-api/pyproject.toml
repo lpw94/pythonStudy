@@ -1,0 +1,52 @@
+[project]
+name = "admin-api"
+version = "0.1.0"
+description = "admin-web 权限路由后端 — 阶段3 Python 学习项目（FastAPI + SQLAlchemy + JWT）"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",      # Web 框架，装饰器即路由，对标 express / koa
+    "uvicorn[standard]>=0.32",  # ASGI 服务器，跑 uvicorn main:app
+    # 本机应用控制策略会拦部分 C 扩展 DLL（sqlalchemy 的 *_cy.pyd 报
+    # 「应用程序控制策略已阻止此文件」），必须用 2.0.x —— 它有纯 Python 回退，
+    # 配合 DISABLE_SQLALCHEMY_CEXT_RUNTIME=1 可完全避开 C 扩展。
+    "sqlalchemy>=2.0,<2.1",  # ORM，对标 prisma / typeorm
+    "pydantic>=2.9",       # 数据校验，对标 zod
+    "pydantic-settings>=2.5",  # 从 .env 读配置
+    "pyjwt>=2.9",          # JWT 签发/校验
+    "bcrypt>=4.1",         # 密码哈希（不用 passlib：1.7.4 与 bcrypt 4.x 不兼容）
+    "python-multipart>=0.0.12",  # 表单解析（登录用 x-www-form-urlencoded 时需要）
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",       # lint + format 一体，对标 ESLint + Prettier
+    "pytest>=8.3",     # 测试框架，fixture 机制对标 Jest
+    "httpx>=0.27",     # TestClient 依赖，用来测接口
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/admin_api"]
+
+# ---- Ruff 配置 ----
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "B008",   # FastAPI 的 Depends(...) 作默认值是官方推荐写法
+    "UP042",  # 保留 (str, Enum) 写法保证教学清晰度
+]
+
+# ---- pytest 配置 ----
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:passlib.*",
+]
