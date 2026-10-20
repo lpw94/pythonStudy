@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>admin-api · 登录联调测试页</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    background: #f5f6f8; color: #1f2329;
+    font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  h2 { margin: 0 0 4px; font-size: 18px; }
+  .sub { color: #8a9099; font-size: 12px; margin-bottom: 18px; }
+  .wrap { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+  .card { background: #fff; border: 1px solid #e5e6eb; border-radius: 8px; padding: 18px; }
+  .card + .card { margin-top: 16px; }
+  label { display: block; font-size: 13px; color: #4e5969; margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 8px 10px; margin-bottom: 14px;
+    border: 1px solid #d9dce1; border-radius: 5px; font-size: 14px; outline: none;
+  }
+  input:focus { border-color: #2b6cf6; }
+  button {
+    padding: 8px 14px; margin: 0 8px 8px 0; cursor: pointer; font-size: 13px;
+    border: 1px solid #d9dce1; border-radius: 5px; background: #fff; color: #1f2329;
+  }
+  button:hover:not(:disabled) { border-color: #2b6cf6; color: #2b6cf6; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: #2b6cf6; border-color: #2b6cf6; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #1d5ae0; color: #fff; }
+  .hint { background: #f7f8fa; border: 1px dashed #d9dce1; border-radius: 5px; padding: 10px; font-size: 12px; color: #4e5969; margin-bottom: 14px; }
+  .hint b { color: #1f2329; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .tag {
+    display: inline-block; padding: 1px 7px; border-radius: 3px;
+    background: #eef2ff; color: #2b6cf6; font-size: 12px; margin: 0 6px 6px 0;
+    font-family: ui-monospace, Consolas, monospace;
+  }
+  .tag.warn { background: #fff3e8; color: #d25f00; }
+  .tag.ok { background: #e8f8ef; color: #00875a; }
+  .tree { list-style: none; padding-left: 0; margin: 0; font-size: 13px; }
+  .tree ul { list-style: none; padding-left: 18px; border-left: 1px dashed #e5e6eb; margin: 0; }
+  .tree li { padding: 4px 0; }
+  .route { font-family: ui-monospace, Consolas, monospace; color: #8a9099; font-size: 12px; }
+  .log {
+    background: #1f2329; color: #d8dee9; border-radius: 6px; padding: 10px 12px;
+    font: 12px/1.7 ui-monospace, Consolas, monospace;
+    max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+  }
+  .log .m { color: #7f8491; }
+  .log .ok { color: #4ec9a5; }
+  .log .err { color: #f2777a; }
+  .log .url { color: #79b8ff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #f0f1f3; }
+  th { color: #8a9099; font-weight: 500; background: #fafbfc; }
+  .kv { font-size: 13px; }
+  .kv div { padding: 3px 0; border-bottom: 1px dashed #f0f1f3; }
+  .kv span:first-child { display: inline-block; width: 96px; color: #8a9099; }
+  #msg { font-size: 13px; margin-bottom: 12px; min-height: 20px; }
+  #msg.err { color: #d83931; }
+  #msg.ok { color: #00875a; }
+</style>
+</head>
+<body>
+<h2>admin-api · 登录联调测试页</h2>
+<div class="sub">单独一个 HTML，不依赖任何前端框架 · 验证 登录 → 令牌 → 档案 → 权限码 → 菜单树 → 受保护接口</div>
+
+<div class="wrap">
+  <!-- ============ 左：登录表单 ============ -->
+  <div>
+    <div class="card">
+      <label>用户名</label>
+      <input id="username" value="admin" autocomplete="off" />
+      <label>密码</label>
+      <input id="password" type="password" value="admin123" autocomplete="off" />
+      <div class="hint">
+        测试账号：<b>admin / admin123</b>（全部权限）<br />
+        <b>operator / op123456</b>（除角色管理外）<br />
+        <b>viewer / view123</b>（只读 · 无用户管理菜单）
+      </div>
+      <button class="primary" id="btnLogin" onclick="doLogin()">登录</button>
+      <button onclick="doRefresh()" id="btnRefresh">用 refresh 换新令牌</button>
+      <button onclick="doMe()" id="btnMe">拉档案 /api/auth/me</button>
+      <button onclick="doLogout()">清空本地令牌</button>
+      <div id="msg"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:13px;color:#4e5969;margin-bottom:10px">令牌（localStorage）</div>
+      <div class="kv" id="tokenBox"><div><span>access</span>—</div><div><span>refresh</span>—</div></div>
+      <button style="margin-top:10px" onclick="doUsers()">试试受保护接口 GET /api/users</button>
+    </div>
+  </div>
+
+  <!-- ============ 右：结果展示 ============ -->
+  <div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;color:#4e5969">当前用户 · 权限码 · 菜单树</div>
+        <button onclick="doMenus()">单独拉 /api/auth/menus</button>
+      </div>
+      <div class="kv" id="profile"><div><span>用户</span>未登录</div></div>
+      <div id="perms" style="margin-top:14px"></div>
+      <div id="tree" style="margin-top:14px"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:13px;color:#4e5969;margin-bottom:10px">
+        GET /api/users 返回（模拟用户管理页表格）
+      </div>
+      <div id="users"><span style="color:#8a9099;font-size:13px">未请求</span></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;color:#4e5969">请求日志（等价于 axios 拦截器 + devtools）</div>
+        <button onclick="document.getElementById('log').textContent=''">清空</button>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== API 基地址：对标前端的 import.meta.env.VITE_API_BASE =====
+const API = 'http://127.0.0.1:8020';
+const LS = { access: 'admin_at', refresh: 'admin_rt' };
+
+function log(url, status, obj, ms) {
+  const el = document.getElementById('log');
+  const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  let body = '';
+  if (obj) {
+    body = ' ' + JSON.stringify(obj).slice(0, 300);
+    if (obj.access_token) body = body.replace(/"access_token":"[^"]+"/, '"access_token":"<省略>"').replace(/"refresh_token":"[^"]+"/, '"refresh_token":"<省略>"');
+  }
+  const cls = status >= 200 && status < 300 ? 'ok' : 'err';
+  el.innerHTML += `<div><span class="m">[${time}]</span> <span class="${cls}">${status}</span> <span class="url">${url}</span> ${ms}ms${body}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function say(text, type) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = type || '';
+}
+
+// ===== 统一的请求封装：等价于 axios 实例 + request interceptor + response interceptor =====
+async function api(path, { method = 'GET', body = null, auth = true } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (auth) {
+    const token = localStorage.getItem(LS.access);
+    if (token) headers['Authorization'] = 'Bearer ' + token;   // ← 请求拦截器塞 token
+  }
+  const t0 = performance.now();
+  let res, data;
+  try {
+    res = await fetch(API + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  } catch (e) {
+    log(path, 'ERR', { message: e.message });
+    throw e;
+  }
+  const ms = Math.round(performance.now() - t0);
+  try { data = await res.json(); } catch { data = null; }
+  log(path, res.status, data, ms);
+  if (!res.ok) throw new Error((data && (data.detail || data.message)) || ('HTTP ' + res.status));
+  return data;
+}
+
+// ===== 登录 =====
+async function doLogin() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  if (!username || !password) return say('用户名和密码不能为空', 'err');
+  say('登录中…');
+  try {
+    const data = await api('/api/auth/login', { method: 'POST', body: { username, password }, auth: false });
+    // 双令牌落盘：对标前端 redux-persist / localStorage
+    localStorage.setItem(LS.access, data.access_token);
+    localStorage.setItem(LS.refresh, data.refresh_token);
+    showTokens();
+    say('登录成功，正在拉档案…', 'ok');
+    await doMe();
+  } catch (e) {
+    say('登录失败：' + e.message, 'err');
+  }
+}
+
+// ===== 刷新令牌 =====
+async function doRefresh() {
+  const refresh = localStorage.getItem(LS.refresh);
+  if (!refresh) return say('本地没有 refresh_token，请先登录', 'err');
+  say('换取新令牌中…');
+  try {
+    const data = await api('/api/auth/refresh', { method: 'POST', body: { refresh_token: refresh }, auth: false });
+    localStorage.setItem(LS.access, data.access_token);
+    localStorage.setItem(LS.refresh, data.refresh_token);
+    showTokens();
+    say('已换到新的 access_token（剩余 ' + Math.round(data.expires_in / 60) + ' 分钟）', 'ok');
+  } catch (e) {
+    say('刷新失败：' + e.message, 'err');
+  }
+}
+
+// ===== 拉档案 =====
+async function doMe() {
+  try {
+    const p = await api('/api/auth/me');
+    renderProfile(p);
+    say('档案已更新', 'ok');
+  } catch (e) {
+    say('拉档案失败：' + e.message, 'err');
+  }
+}
+
+// ===== 单独拉菜单树（验证 /api/auth/menus 与 /me 里的 menus 一致）=====
+async function doMenus() {
+  try {
+    const data = await api('/api/auth/menus');
+    const flat = [];
+    (function walk(nodes, depth) {
+      nodes.forEach(n => { flat.push('  '.repeat(depth) + n.route_name + '  ' + n.path); walk(n.children || [], depth + 1); });
+    })(data.items || data || [], 0);
+    document.getElementById('tree').innerHTML =
+      '<div style="font-size:12px;color:#8a9099;margin-bottom:6px">GET /api/auth/menus（独立接口）</div>' +
+      '<div class="route" style="white-space:pre-wrap">' + flat.join('\n') + '</div>';
+  } catch (e) {
+    say('拉菜单失败：' + e.message, 'err');
+  }
+}
+
+// ===== 调受保护接口 =====
+async function doUsers() {
+  const box = document.getElementById('users');
+  box.innerHTML = '加载中…';
+  try {
+    const page = await api('/api/users?page=1&page_size=5');
+    const rows = page.items.map(u =>
+      '<tr><td>' + u.id + '</td><td>' + u.username + '</td><td>' + (u.nickname || '-') + '</td><td>' +
+      (u.roles.map(r => r.name).join('、') || '-') + '</td><td>' + (u.is_active ? '启用' : '停用') + '</td></tr>'
+    ).join('');
+    box.innerHTML =
+      '<div style="margin-bottom:8px;font-size:12px;color:#8a9099">共 ' + page.meta.total + ' 条 · 第 ' + page.meta.page + '/' + page.meta.pages + ' 页</div>' +
+      '<table><thead><tr><th>ID</th><th>用户名</th><th>昵称</th><th>角色</th><th>状态</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  } catch (e) {
+    // 403 是预期结果：无 user:read 权限的角色会命中
+    box.innerHTML = '<span style="color:#d83931;font-size:13px">请求被拒：' + e.message + '（说明权限拦截生效）</span>';
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem(LS.access);
+  localStorage.removeItem(LS.refresh);
+  showTokens();
+  say('本地令牌已清空');
+}
+
+// ===== 渲染 =====
+function showTokens() {
+  const a = localStorage.getItem(LS.access), r = localStorage.getItem(LS.refresh);
+  const short = v => (v ? v.slice(0, 24) + '…' + v.slice(-8) : '—');
+  document.getElementById('tokenBox').innerHTML =
+    '<div><span>access</span>' + short(a) + '</div><div><span>refresh</span>' + short(r) + '</div>';
+}
+
+function renderProfile(p) {
+  document.getElementById('profile').innerHTML =
+    '<div><span>用户</span>' + p.username + (p.nickname ? '（' + p.nickname + '）' : '') + '</div>' +
+    '<div><span>邮箱</span>' + (p.email || '-') + '</div>' +
+    '<div><span>角色</span>' + p.roles.map(r => '<span class="tag ok">' + r + '</span>').join('') + '</div>';
+
+  // hasPermission() 用的权限码数组
+  document.getElementById('perms').innerHTML =
+    '<div style="font-size:12px;color:#8a9099;margin-bottom:6px">权限码 permissions（' + p.permissions.length + ' 个）</div>' +
+    p.permissions.map(c => '<span class="tag">' + c + '</span>').join('');
+
+  // 动态路由数据源：router.addRoute() 就是拿这个 tree
+  const build = nodes =>
+    '<ul>' + nodes.map(m =>
+      '<li><b>' + m.name + '</b> <span class="route">' + m.route_name + ' · ' + m.path + '</span>' +
+      (m.permissions && m.permissions.length ? '<div style="margin:2px 0 0">' + m.permissions.map(c => '<span class="tag warn">' + c + '</span>').join('') + '</div>' : '') +
+      (m.children && m.children.length ? build(m.children) : '') +
+      '</li>'
+    ).join('') + '</ul>';
+  document.getElementById('tree').innerHTML =
+    '<div style="font-size:12px;color:#8a9099;margin-bottom:6px">菜单树 menus（router.addRoute 的数据源）</div>' +
+    '<ul class="tree">' + build(p.menus).replace('<ul>', '').replace(/<\/ul>$/, '') + '</ul>';
+}
+
+// ===== 页面载入：如果本地有令牌，自动拉一次档案 =====
+(function init() {
+  showTokens();
+  log('页面就绪，API 基地址 ' + API, 200, null, 0);
+  if (localStorage.getItem(LS.access)) doMe();
+})();
+</script>
+</body>
+</html>
