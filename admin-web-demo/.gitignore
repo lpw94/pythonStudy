@@ -1,0 +1,7 @@
+node_modules
+dist
+*.local
+.DS_Store
+
+# TypeScript 增量编译缓存
+tsconfig.tsbuildinfo
