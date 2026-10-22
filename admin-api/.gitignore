@@ -16,3 +16,7 @@ venv/
 .env
 .env.*
 !.env.example
+
+# ---- Alembic ----
+# 迁移脚本要提交，但 Python 缓存不用
+migrations/**/__pycache__/

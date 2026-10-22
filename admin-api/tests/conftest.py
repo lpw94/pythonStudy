@@ -14,8 +14,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from admin_api.core.security import hash_password
-from admin_api.database import Base, get_db
+from admin_api.database import get_db
 from admin_api.main import app
+from admin_api.migrate import downgrade_to_base_with, upgrade_to_head_with
 from admin_api.models import Menu, Permission, Role, User
 
 # 内存 SQLite：StaticPool 让所有连接共用同一个内存库，
@@ -39,15 +40,23 @@ def override_get_db() -> Generator[Session, None, None]:
 
 @pytest.fixture
 def db() -> Generator[Session, None, None]:
-    """每个测试一个干净库：建表 → 灌数据 → 测试 → 删表。"""
-    Base.metadata.create_all(bind=TEST_ENGINE)
+    """每个测试一个干净库：迁移建表 → 灌数据 → 测试 → 迁移回滚。
+
+    建表走 Alembic 迁移（不是 create_all）——
+    这样测试库的表结构和生产库来自同一份脚本，不会出现「测试过了线上炸」。
+
+    清理用 downgrade 到 base 而不是 drop_all：
+    drop_all 不碰 alembic_version，版本号残留会让下一个测试
+    的 upgrade 变成空操作，表就没建出来。
+    """
+    upgrade_to_head_with(TEST_ENGINE)
     session = TestingSessionLocal()
     _seed(session)
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=TEST_ENGINE)
+        downgrade_to_base_with(TEST_ENGINE)
 
 
 def _seed(db: Session) -> None:

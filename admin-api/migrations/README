@@ -1,0 +1,15 @@
+数据库版本化迁移脚本。
+
+对标 prisma migrate / knex migrate —— 用「版本号」管理表结构变更，
+每个版本一份脚本，能往前（upgrade）也能往后（downgrade）。
+
+常用命令（在 admin-api/ 目录执行）：
+
+    alembic upgrade head                              # 应用到最新版本
+    alembic downgrade -1                              # 回滚一版
+    alembic revision --autogenerate -m "给 users 加字段"  # 按模型差异生成新迁移
+    alembic current                                   # 当前数据库版本
+    alembic history                                   # 版本历史
+
+注意：模型改了之后要**手动检查**生成的迁移文件再提交，
+autogenerate 只是翻译差异，改名/改约束这类它识别不出来。

@@ -16,6 +16,7 @@ dependencies = [
     "pyjwt>=2.9",          # JWT 签发/校验
     "bcrypt>=4.1",         # 密码哈希（不用 passlib：1.7.4 与 bcrypt 4.x 不兼容）
     "python-multipart>=0.0.12",  # 表单解析（登录用 x-www-form-urlencoded 时需要）
+    "alembic>=1.14",       # 数据库版本化迁移（对标 prisma migrate / flyway）
 ]
 
 [dependency-groups]

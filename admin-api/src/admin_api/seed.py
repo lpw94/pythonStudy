@@ -3,6 +3,10 @@
 运行：uv run python -m admin_api.seed
 
 对标前端：数据库初始化脚本 / prisma db seed。
+
+建表走 Alembic（`alembic upgrade head`），不直接 create_all——
+这样开发库、测试库、生产库的结构都由同一份迁移脚本决定，
+不会出现「本地能跑线上炸了」。种子数据本身是幂等的，重复跑安全。
 """
 from __future__ import annotations
 
@@ -11,7 +15,8 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from .core.security import hash_password
-from .database import Base, SessionLocal, engine
+from .database import SessionLocal
+from .migrate import upgrade_to_head
 from .models import Menu, Permission, Role, User
 
 
@@ -156,13 +161,21 @@ def seed(db: Session) -> None:
 
 
 def main() -> None:
-    """建表 + 灌数据。"""
-    print("[seed] 建表…")
-    Base.metadata.create_all(bind=engine)
-    print("[seed] 灌种子数据…")
+    """建表 + 灌数据。
+
+    print 全部带 flush=True：Alembic 的日志走 stderr、print 走 stdout，
+    管道场景下 stdout 是块缓冲的，不 flush 会出现「迁移日志」跑到
+    「应用数据库迁移…」前面的错觉。
+    """
+    print("[seed] 应用数据库迁移…", flush=True)
+    upgrade_to_head()
+    print("[seed] 灌种子数据…", flush=True)
     with SessionLocal() as db:
         seed(db)
-    print("[seed] 完成。默认账号：admin/admin123、operator/op123456、viewer/view123")
+    print(
+        "[seed] 完成。默认账号：admin/admin123、operator/op123456、viewer/view123",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
