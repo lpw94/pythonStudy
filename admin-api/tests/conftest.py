@@ -60,10 +60,29 @@ def db() -> Generator[Session, None, None]:
 
 
 def _seed(db: Session) -> None:
-    """灌最小测试数据：一个 admin、一个 viewer、两个菜单、两个权限。"""
+    """灌最小测试数据。
+
+    四个角色覆盖权限系统的各个档位：
+
+    | 角色 | 挂的菜单 | 权限码 |
+    | --- | --- | --- |
+    | admin | 全部 | 全量 |
+    | operator | 用户管理 + 菜单管理 | user:*, menu:* |
+    | auditor | 角色查看（只读） | role:read |
+    | viewer | 无 | 无 |
+
+    `auditor` 这一档很关键：它证明「能读角色」和「能改角色」是两种能力，
+    不只是 admin 全有、其他人全无。
+    """
     perms = {
         "user:read": Permission(code="user:read", name="查看用户", group="用户管理"),
+        "user:create": Permission(code="user:create", name="创建用户", group="用户管理"),
+        "user:update": Permission(code="user:update", name="编辑用户", group="用户管理"),
         "user:delete": Permission(code="user:delete", name="删除用户", group="用户管理"),
+        "role:read": Permission(code="role:read", name="查看角色", group="角色管理"),
+        "role:write": Permission(code="role:write", name="编辑角色", group="角色管理"),
+        "menu:read": Permission(code="menu:read", name="查看菜单", group="菜单管理"),
+        "menu:write": Permission(code="menu:write", name="编辑菜单", group="菜单管理"),
     }
     for p in perms.values():
         db.add(p)
@@ -75,13 +94,36 @@ def _seed(db: Session) -> None:
         route_name="system-user",
         sort=1,
         parent_id=0,
-        permissions=[perms["user:read"]],
+        permissions=[perms["user:read"], perms["user:create"], perms["user:update"]],
     )
-    db.add(user_menu)
+    # 单独一个「角色查看」菜单：只声明 role:read，不含 role:write
+    role_view_menu = Menu(
+        name="角色查看",
+        path="/system/role-view",
+        component="system/role",
+        route_name="system-role-view",
+        sort=2,
+        parent_id=0,
+        permissions=[perms["role:read"]],
+    )
+    menu_menu = Menu(
+        name="菜单管理",
+        path="/system/menu",
+        component="system/menu",
+        route_name="system-menu",
+        sort=3,
+        parent_id=0,
+        permissions=[perms["menu:read"], perms["menu:write"]],
+    )
+    db.add_all([user_menu, role_view_menu, menu_menu])
     db.flush()
 
     admin_role = Role(code="admin", name="管理员", remark="")
-    admin_role.menus = [user_menu]
+    admin_role.menus = [user_menu, role_view_menu, menu_menu]
+    operator_role = Role(code="operator", name="操作员", remark="")
+    operator_role.menus = [user_menu, menu_menu]
+    auditor_role = Role(code="auditor", name="审计员", remark="")
+    auditor_role.menus = [role_view_menu]
     viewer_role = Role(code="viewer", name="只读", remark="")
 
     db.add_all(
@@ -91,6 +133,18 @@ def _seed(db: Session) -> None:
                 password_hash=hash_password("admin123"),
                 nickname="管理员",
                 roles=[admin_role],
+            ),
+            User(
+                username="operator",
+                password_hash=hash_password("op123456"),
+                nickname="操作员",
+                roles=[operator_role],
+            ),
+            User(
+                username="auditor",
+                password_hash=hash_password("audit123"),
+                nickname="审计员",
+                roles=[auditor_role],
             ),
             User(
                 username="viewer",
@@ -130,6 +184,34 @@ def viewer_token(client: TestClient) -> str:
     resp = client.post("/api/auth/login", json={"username": "viewer", "password": "view123"})
     assert resp.status_code == 200
     return resp.json()["access_token"]
+
+
+@pytest.fixture
+def operator_token(client: TestClient) -> str:
+    """已登录 operator 的 access token。
+
+    operator 有 user:* 和 menu:*，没有 role:read / role:write。
+    """
+    resp = client.post("/api/auth/login", json={"username": "operator", "password": "op123456"})
+    assert resp.status_code == 200
+    return resp.json()["access_token"]
+
+
+@pytest.fixture
+def operator_header(operator_token: str) -> dict[str, str]:
+    """operator 的 Authorization 头。"""
+    return {"Authorization": f"Bearer {operator_token}"}
+
+
+@pytest.fixture
+def auditor_header(client: TestClient) -> dict[str, str]:
+    """auditor 的 Authorization 头。
+
+    auditor 只有 role:read，能读角色列表但改不了。
+    """
+    resp = client.post("/api/auth/login", json={"username": "auditor", "password": "audit123"})
+    assert resp.status_code == 200
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
 
 @pytest.fixture

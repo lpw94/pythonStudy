@@ -72,7 +72,10 @@ export default function AppRouter() {
   if (initializing) {
     return (
       <div className="page-center">
-        <Spin size="large" tip="正在校验登录态…" />
+        {/* Spin 的 tip 只在 nest / fullscreen 模式下生效。
+            这里用 fullscreen——初始化阶段整页都该被遮住，
+            等登录态校验完再渲染真实界面，避免闪烁。 */}
+        <Spin size="large" fullscreen tip="正在校验登录态…" />
       </div>
     );
   }

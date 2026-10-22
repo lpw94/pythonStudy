@@ -4,9 +4,9 @@
  * 对标 admin-web 的 `src/services/request.ts`（umi-request extend + 拦截器），
  * 这里用原生 fetch 手写一遍，目的是看清「拦截器」到底做了什么。
  */
-import { message } from 'antd';
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from './token';
 import type { TokenPair } from '@/types/api';
+import { notify } from '@/services/notify';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8020';
 
@@ -99,7 +99,7 @@ async function rawRequest<T>(url: string, options: RequestOptions = {}): Promise
       if (ok) return rawRequest<T>(url, { ...options, _retried: true });
       // 刷新失败说明登录态彻底失效，清干净回登录页
       clearTokens();
-      message.error('登录已过期，请重新登录');
+      notify.error('登录已过期，请重新登录');
       // 用 replace 而不是 push：过期跳转不该在历史里留一条返回记录
       window.location.replace('/login');
       throw new ApiError(401, '登录已过期');

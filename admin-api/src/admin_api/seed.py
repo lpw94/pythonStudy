@@ -106,7 +106,11 @@ def seed(db: Session) -> None:
             )
             db.add(existing)
             db.flush()
-        # 绑定权限
+        # 绑定权限。
+        # 注意这是**覆盖式赋值**（不是 append）：seed 每次跑都会把菜单的权限
+        # 重置成 PERMISSIONS 里声明的那一份。
+        # 这是幂等的代价——如果你在管理端手动改过菜单权限码，
+        # 跑一次 seed 就会被改回去。开发期可以接受，生产环境别随便跑 seed。
         existing.permissions = [perm_map[c] for c in spec.permissions if c in perm_map]
         menu_map[spec.route_name] = existing
 

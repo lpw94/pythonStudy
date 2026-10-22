@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import auth, menus, users
+from .api import auth, menus, roles, users
 from .config import settings
 
 app = FastAPI(
@@ -33,6 +33,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(menus.router)
+app.include_router(roles.router)
 
 
 @app.get("/api/health", tags=["系统"], summary="健康检查")

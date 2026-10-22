@@ -109,14 +109,48 @@ uv run pytest -q
 
 ## 核心接口
 
-| 方法 | 路径 | 说明 | 对标前端 |
-| --- | --- | --- | --- |
-| POST | `/api/auth/login` | 账号密码换 token | 登录页的 `login()` action |
-| POST | `/api/auth/refresh` | 刷新令牌 | axios 响应拦截器里的 401 续期逻辑 |
-| GET | `/api/auth/me` | 当前用户 + 权限码 | `useUserStore().profile` |
-| GET | `/api/auth/menus` | **当前用户可见的菜单树** | 动态路由 `addRoute()` 的数据源 |
-| GET/POST | `/api/users` | 用户列表 / 创建 | 后台用户管理页表格 |
-| GET/PUT/DELETE | `/api/users/{id}` | 用户详情 / 改 / 删 | 同上 |
+| 方法 | 路径 | 权限码 | 说明 | 对标前端 |
+| --- | --- | --- | --- | --- |
+| POST | `/api/auth/login` | - | 账号密码换 token | 登录页的 `login()` action |
+| POST | `/api/auth/refresh` | - | 刷新令牌 | axios 响应拦截器里的 401 续期逻辑 |
+| GET | `/api/auth/me` | 登录即可 | 当前用户 + 权限码 + 菜单树 | `useUserStore().profile` |
+| GET | `/api/auth/menus` | 登录即可 | **当前用户可见的菜单树** | 动态路由 `addRoute()` 的数据源 |
+| GET/POST | `/api/users` | `user:read` / `user:create` | 用户列表 / 创建 | 后台用户管理页表格 |
+| GET/PUT/DELETE | `/api/users/{id}` | `user:read` / `user:update` / `user:delete` | 用户详情 / 改 / 删 | 同上 |
+| GET | `/api/menus` | `menu:read` | 全量菜单**树** | 左侧导航渲染 |
+| GET | `/api/menus/flat` | `menu:read` | 全量菜单**平铺** | 角色授权的多选框 |
+| POST/PUT/DELETE | `/api/menus[/{id}]` | `menu:write` | 菜单增删改 | 菜单管理页 |
+| GET | `/api/roles` | `role:read` | 完整角色列表（含权限码、用户数） | 角色管理页 |
+| GET | `/api/roles/options` | `menu:read` | 精简角色列表 | 用户编辑页的角色下拉框 |
+| POST/PUT/DELETE | `/api/roles[/{id}]` | `role:write` | 角色增删改 | 角色管理页 |
+
+### 为什么角色有两个列表接口
+
+`/api/roles` 要 `role:read`，`/api/roles/options` 要 `menu:read`。
+
+因为**「能改用户」和「能管角色」是两种能力**：运营人员要能给人分配角色，
+但不一定该看到所有角色的权限构成。所以下拉框用一个权限更宽的精简接口。
+
+### 授权 = 勾菜单
+
+权限码挂在**菜单**上，不直接挂角色。所以「给角色授权」这个动作：
+
+```
+前端勾选菜单 → 提交 menu_ids → 后端存 role_menus 关联
+                                    ↓
+                        权限码 = 该角色所有菜单的权限并集
+```
+
+推论：**在菜单管理页改权限码，会同时改掉所有关联这个菜单的角色**。
+这不是 bug，是这个模型的必然结果。
+
+### 删除保护
+
+| 操作 | 拒绝条件 | 原因 |
+| --- | --- | --- |
+| 删角色 | 角色下还有用户 | 否则用户静默失去所有权限，最难排查 |
+| 删菜单 | 有子菜单 | 否则子菜单成孤儿 |
+| 删菜单 | 还有角色引用 | 否则那些角色静默失去菜单和权限码 |
 
 ## 权限模型（和 admin-web 对齐）
 

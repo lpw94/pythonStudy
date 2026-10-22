@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import Menu, Permission, Role, User
+from ..models import Menu, Permission, Role, User, role_menus, user_roles
 
 # ============================================================
 # 用户
@@ -85,6 +85,38 @@ def list_roles(db: Session) -> list[Role]:
     return list(db.execute(stmt).scalars().all())
 
 
+def get_role_by_id(db: Session, role_id: int) -> Role | None:
+    """按 id 查角色。"""
+    return db.get(Role, role_id)
+
+
+def get_role_by_code(db: Session, code: str) -> Role | None:
+    """按 code 查角色。"""
+    stmt = select(Role).where(Role.code == code)
+    return db.execute(stmt).scalar_one_or_none()
+
+
+def code_exists(db: Session, code: str, *, exclude_id: int = 0) -> bool:
+    """角色 code 是否已被占用。"""
+    stmt = select(func.count()).select_from(Role).where(Role.code == code)
+    if exclude_id:
+        stmt = stmt.where(Role.id != exclude_id)
+    return bool(db.execute(stmt).scalar_one())
+
+
+def count_users_in_role(db: Session, role_id: int) -> int:
+    """某个角色下有几个用户。
+
+    删角色前要查——不然用户会静默失去权限。
+    """
+    stmt = (
+        select(func.count())
+        .select_from(user_roles)
+        .where(user_roles.c.role_id == role_id)
+    )
+    return int(db.execute(stmt).scalar_one())
+
+
 def get_roles_by_codes(db: Session, codes: Sequence[str]) -> list[Role]:
     """按 code 批量查角色。
 
@@ -99,6 +131,14 @@ def get_roles_by_codes(db: Session, codes: Sequence[str]) -> list[Role]:
 def list_permissions(db: Session) -> list[Permission]:
     """所有权限码。"""
     stmt = select(Permission).order_by(Permission.group, Permission.id)
+    return list(db.execute(stmt).scalars().all())
+
+
+def get_permissions_by_codes(db: Session, codes: Sequence[str]) -> list[Permission]:
+    """按 code 批量查权限码。"""
+    if not codes:
+        return []
+    stmt = select(Permission).where(Permission.code.in_(list(codes)))
     return list(db.execute(stmt).scalars().all())
 
 
@@ -119,3 +159,34 @@ def get_menus_by_ids(db: Session, menu_ids: Sequence[int]) -> list[Menu]:
         return []
     stmt = select(Menu).where(Menu.id.in_(list(menu_ids))).order_by(Menu.sort, Menu.id)
     return list(db.execute(stmt).scalars().all())
+
+
+def get_menu_by_id(db: Session, menu_id: int) -> Menu | None:
+    """按 id 查菜单。"""
+    return db.get(Menu, menu_id)
+
+
+def route_name_exists(db: Session, route_name: str, *, exclude_id: int = 0) -> bool:
+    """路由 name 是否已被占用。
+
+    路由 name 必须全局唯一——前端 `addRoute()` 靠它做标识，
+    重复会导致动态路由注册出错。
+    """
+    stmt = select(func.count()).select_from(Menu).where(Menu.route_name == route_name)
+    if exclude_id:
+        stmt = stmt.where(Menu.id != exclude_id)
+    return bool(db.execute(stmt).scalar_one())
+
+
+def count_child_menus(db: Session, menu_id: int) -> int:
+    """某个菜单下有几个子菜单。"""
+    stmt = select(func.count()).select_from(Menu).where(Menu.parent_id == menu_id)
+    return int(db.execute(stmt).scalar_one())
+
+
+def count_roles_with_menu(db: Session, menu_id: int) -> int:
+    """有多少个角色挂着这个菜单。"""
+    stmt = (
+        select(func.count()).select_from(role_menus).where(role_menus.c.menu_id == menu_id)
+    )
+    return int(db.execute(stmt).scalar_one())

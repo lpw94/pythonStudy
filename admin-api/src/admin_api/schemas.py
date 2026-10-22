@@ -170,3 +170,84 @@ class UserPage(BaseModel):
 
     items: list[UserOut] = Field(default_factory=list)
     meta: PageMeta
+
+
+# ============================================================
+# 角色
+# ============================================================
+
+
+class RoleOut(BaseModel):
+    """角色输出。
+
+    `permissions` 是这个角色挂的菜单所衍生的权限码并集——
+    前端角色编辑页要显示「这个角色实际能干什么」，
+    但权限码在数据库里是挂在菜单上的，不是直接挂角色的。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+    remark: str = ""
+    # 该角色关联的菜单 id
+    menu_ids: list[int] = Field(default_factory=list)
+    # 该角色实际拥有的权限码（由菜单推导）
+    permissions: list[str] = Field(default_factory=list)
+    user_count: int = 0
+    created_at: datetime | None = None
+
+
+class RoleCreate(BaseModel):
+    """创建角色入参。"""
+
+    code: str = Field(..., min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9_-]*$")
+    name: str = Field(..., min_length=1, max_length=64)
+    remark: str = Field(default="", max_length=255)
+    # 要关联的菜单 id 列表
+    menu_ids: list[int] = Field(default_factory=list)
+
+
+class RoleUpdate(BaseModel):
+    """更新角色入参：所有字段可选，只传要改的。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    remark: str | None = Field(default=None, max_length=255)
+    menu_ids: list[int] | None = None
+
+
+# ============================================================
+# 菜单
+# ============================================================
+
+
+class MenuCreate(BaseModel):
+    """创建菜单入参。"""
+
+    name: str = Field(..., min_length=1, max_length=64)
+    path: str = Field(..., min_length=1, max_length=128)
+    # 前端组件路径，对应 dynamic import 的键，如 "system/user"
+    component: str = Field(default="", max_length=128)
+    # 路由 name，必须全局唯一
+    route_name: str = Field(..., min_length=1, max_length=128)
+    icon: str = Field(default="", max_length=64)
+    sort: int = 0
+    visible: bool = True
+    # 父菜单 id，0 表示顶级
+    parent_id: int = 0
+    # 该菜单需要的权限码
+    permission_codes: list[str] = Field(default_factory=list)
+
+
+class MenuUpdate(BaseModel):
+    """更新菜单入参：所有字段可选，只传要改的。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    path: str | None = Field(default=None, min_length=1, max_length=128)
+    component: str | None = Field(default=None, max_length=128)
+    icon: str | None = Field(default=None, max_length=64)
+    sort: int | None = None
+    visible: bool | None = None
+    parent_id: int | None = None
+    permission_codes: list[str] | None = None

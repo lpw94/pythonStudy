@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from ..core.deps import DbSession, require_permission
 from ..models import User
 from ..repositories import get_user_by_id
-from ..schemas import UserCreate, UserOut, UserPage
-from ..services import UserError, create_user, delete_user, list_users_page
+from ..schemas import UserCreate, UserOut, UserPage, UserUpdate
+from ..services import UserError, create_user, delete_user, list_users_page, update_user
 
 router = APIRouter(prefix="/api/users", tags=["用户管理"])
 
@@ -62,6 +62,32 @@ def api_get_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     return user
+
+
+@router.put("/{user_id}", response_model=UserOut, summary="更新用户")
+def api_update_user(
+    user_id: int,
+    payload: UserUpdate,
+    db: DbSession,
+    _admin: User = Depends(require_permission("user:update")),
+) -> UserOut:
+    """改用户（昵称/邮箱/密码/角色/启用状态）。
+
+    部分更新语义：**不传的字段保持原样**，不是置空。
+    前端表单只提交改动过的字段就行。
+    """
+    try:
+        return update_user(
+            db,
+            user_id,
+            nickname=payload.nickname,
+            email=payload.email,
+            is_active=payload.is_active,
+            password=payload.password,
+            role_codes=payload.role_codes,
+        )
+    except UserError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, summary="删除用户")

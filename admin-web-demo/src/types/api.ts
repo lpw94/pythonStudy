@@ -84,3 +84,59 @@ export interface RoleItem {
   name: string;
   remark: string;
 }
+
+/** 角色详情，对应 RoleOut */
+export interface RoleDetail extends RoleItem {
+  /** 关联的菜单 id */
+  menu_ids: number[];
+  /** 由关联菜单推导出的权限码 */
+  permissions: string[];
+  /** 该角色下的用户数 */
+  user_count: number;
+  created_at: string | null;
+}
+
+export interface RoleCreate {
+  code: string;
+  name: string;
+  remark?: string;
+  menu_ids?: number[];
+}
+
+export interface RoleUpdate {
+  name?: string;
+  remark?: string;
+  menu_ids?: number[];
+}
+
+export interface MenuCreate {
+  name: string;
+  path: string;
+  component?: string;
+  route_name: string;
+  icon?: string;
+  sort?: number;
+  visible?: boolean;
+  parent_id?: number;
+  permission_codes?: string[];
+}
+
+export interface MenuUpdate {
+  name?: string;
+  path?: string;
+  component?: string;
+  icon?: string;
+  sort?: number;
+  visible?: boolean;
+  parent_id?: number;
+  permission_codes?: string[];
+}
+
+/** 权限码，对应 PermissionOut */
+export interface PermissionItem {
+  id: number;
+  code: string;
+  name: string;
+  /** 分组名，后端按它分栏 */
+  group: string;
+}
