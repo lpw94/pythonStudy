@@ -5,6 +5,7 @@
 - 连续失败到上限 → 抛 CaptchaError（而不是永远重试下去）
 - 下载失败（服务端返回非图片）→ 也算一次尝试，最终抛错
 - 中途成功 → 立刻返回，不再重试
+- 每次重试都用**新的** key（验证码一次性有效，key 必须对得上）
 """
 from __future__ import annotations
 
@@ -23,7 +24,10 @@ def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
 def _fake_download(
     monkeypatch: pytest.MonkeyPatch, paths: list[str], fail_times: int = 0
 ) -> None:
-    """替换 download_captcha：按顺序返回给定路径，前 fail_times 次抛错。"""
+    """替换 download_captcha：按顺序返回给定路径，前 fail_times 次抛错。
+
+    每次调用都返回一个新的 key（自增），用来验证重试时 key 会换。
+    """
     it = iter(paths)
     calls = {"n": 0}
 
@@ -31,7 +35,7 @@ def _fake_download(
         calls["n"] += 1
         if calls["n"] <= fail_times:
             raise CaptchaError("内容不是图片：Token不能为空")
-        return next(it)
+        return next(it), 1000 + calls["n"]
 
     monkeypatch.setattr(login_test, "download_captcha", _dl)
 
@@ -47,10 +51,10 @@ def test_retry_until_valid(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     _fake_download(monkeypatch, ["a.jpg", "b.jpg", "c.jpg"])
     _fake_recognize(monkeypatch, ["ab1", "abcde", "ab12"])
 
-    img, text = download_and_recognize(max_retry=5, save_dir=tmp_path)
+    captcha = download_and_recognize(max_retry=5, save_dir=tmp_path)
 
-    assert text == "ab12"
-    assert img == "c.jpg"
+    assert captcha.code == "ab12"
+    assert captcha.path == "c.jpg"
 
 
 def test_success_on_first_try(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -58,9 +62,9 @@ def test_success_on_first_try(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None
     _fake_download(monkeypatch, ["a.jpg"])
     _fake_recognize(monkeypatch, ["ab12"])
 
-    img, text = download_and_recognize(max_retry=5, save_dir=tmp_path)
+    captcha = download_and_recognize(max_retry=5, save_dir=tmp_path)
 
-    assert (img, text) == ("a.jpg", "ab12")
+    assert (captcha.path, captcha.code) == ("a.jpg", "ab12")
 
 
 def test_exhausted_raises(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -90,9 +94,9 @@ def test_download_failure_then_success(
     _fake_download(monkeypatch, ["a.jpg"], fail_times=1)
     _fake_recognize(monkeypatch, ["ab12"])
 
-    _img, text = download_and_recognize(max_retry=3, save_dir=tmp_path)
+    captcha = download_and_recognize(max_retry=3, save_dir=tmp_path)
 
-    assert text == "ab12"
+    assert captcha.code == "ab12"
 
 
 def test_recognize_exception_is_retried(
@@ -110,9 +114,9 @@ def test_recognize_exception_is_retried(
     _fake_download(monkeypatch, ["a.jpg", "b.jpg"])
     monkeypatch.setattr(login_test, "recognize", _rec)
 
-    _img, text = download_and_recognize(max_retry=3, save_dir=tmp_path)
+    captcha = download_and_recognize(max_retry=3, save_dir=tmp_path)
 
-    assert text == "ab12"
+    assert captcha.code == "ab12"
     assert calls["n"] == 2
 
 
@@ -125,3 +129,21 @@ def test_max_retry_one_does_not_retry(
 
     with pytest.raises(CaptchaError):
         download_and_recognize(max_retry=1, save_dir=tmp_path)
+
+
+def test_key_changes_between_retries(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """重试必须换新的 key。
+
+    验证码是一次性有效的：服务端按 URL 上的时间戳认图，识别失败重来时
+    拿的是新图，key 也必须跟着变，否则 key 和图对不上。
+    """
+    _fake_download(monkeypatch, ["a.jpg", "b.jpg"])
+    _fake_recognize(monkeypatch, ["ab1", "ab12"])
+
+    captcha = download_and_recognize(max_retry=5, save_dir=tmp_path)
+
+    # 假下载函数按调用次序返回 1001、1002
+    assert captcha.key == 1002
+    assert captcha.path == "b.jpg"

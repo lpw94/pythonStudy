@@ -1,22 +1,22 @@
-"""OCR 自检脚本 —— 不登录、不连 MQTT，只验证"验证码识别"这一环。
+"""OCR 自检脚本 —— 不登录、不连 MQTT，只验证「验证码识别」这一环。
 
-用法：
-    .venv/Scripts/python.exe scripts/check_ocr.py            # 用 img/ 里最新一张图
-    .venv/Scripts/python.exe scripts/check_ocr.py 图片路径    # 指定图片
+用法（用 3.12 环境，ddddocr 依赖 opencv）：
+    .py312/python.exe scripts/check_ocr.py            # 用 img/ 里最新一张图
+    .py312/python.exe scripts/check_ocr.py 图片路径    # 指定图片
 
-排查顺序：先看 AK/SK 能不能换到 token，再看 OCR 接口有没有权限。
-输出里每个环节都会给出结论，照着改就行。
+早前这个脚本依赖已裁剪掉的 `http_client.ocr_captcha` / `ocr_ddddocr`，
+早就跑不起来了。现在直接复用 `login_test.recognize`（本地 ddddocr 实现）。
 """
 import sys
 from pathlib import Path
 
-from funeng_sync import config
-from funeng_sync.http_client import ocr_captcha, ocr_ddddocr
+from funeng_sync.login_test import CAPTCHA_LENGTH, CaptchaError, recognize
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def latest_image() -> Path | None:
+    """取 img/ 目录里最新的一张验证码图片。"""
     img_dir = ROOT / "img"
     if not img_dir.exists():
         return None
@@ -26,46 +26,32 @@ def latest_image() -> Path | None:
 
 def main() -> int:
     print("=" * 60)
-    print(f"识别方案 OCR_PROVIDER = {config.OCR_PROVIDER}")
-    if config.OCR_PROVIDER == "baidu":
-        print(f"接口     = {config.BAIDU_OCR_ENDPOINT}")
-        key = config.BAIDU_API_KEY
-        print(f"API_KEY  = {key[:8]}...（后 4 位 {key[-4:]}）")
+    print("识别方案 = ddddocr（本地离线，无需联网 / AK-SK）")
     print("=" * 60)
 
-    # 第 1 步：换取 access_token（只对百度方案有意义）
-    if config.OCR_PROVIDER == "baidu":
-        from funeng_sync.http_client import get_baidu_token
-
-        token = get_baidu_token(force=True)
-        if not token:
-            print("❌ 换 token 失败：AK/SK 无效，或网络不通。")
-            print("   检查 config 里的百度 AK/SK 是否与控制台一致。")
-            return 1
-        print(f"✅ 换 token 成功：{token[:12]}...（说明 AK/SK 本身有效）")
-
-    # 第 2 步：拿一张验证码图片
+    # 第 1 步：拿一张验证码图片
     img = Path(sys.argv[1]) if len(sys.argv) > 1 else latest_image()
     if img is None or not img.exists():
-        print("❌ 没找到验证码图片，请先跑一次主程序生成 img/*.jpg，或手动传图片路径。")
+        print("❌ 没找到验证码图片。")
+        print("   请先跑一次 -m funeng_sync.login 生成 img/*.jpg，或手动传图片路径。")
         return 1
     print(f"📷 使用图片：{img}")
 
-    # 第 3 步：识别
-    if config.OCR_PROVIDER == "ddddocr":
-        text = ocr_ddddocr(str(img))
-    else:
-        text = ocr_captcha(str(img))
+    # 第 2 步：识别
+    try:
+        text = recognize(str(img))
+    except CaptchaError as e:
+        print(f"❌ 识别异常：{e}")
+        return 2
 
     print("-" * 60)
-    if text:
+    if len(text) == CAPTCHA_LENGTH:
         print(f"✅ 识别成功：{text}")
-        print("   如果主程序仍登录失败，问题在验证码本身或 cookie 会话，不在识别环节。")
+        print("   如果登录仍失败，问题不在识别环节——多半是 key 与验证码时间戳对不上。")
         return 0
-    print("⚠️ 本次没识别出 4 位验证码。")
-    print("   · error_code=6 → 应用无 OCR 权限，去「文字识别 OCR」控制台勾选接口")
-    print("   · 识别文本不是 4 位 → 验证码带干扰线，可换 accurate_basic 或 ddddocr")
-    print("   · 可多跑几次（验证码难度随机），或把 OCR_PROVIDER 改成 ddddocr 对比")
+    print(f"⚠️ 本次没识别出 {CAPTCHA_LENGTH} 位验证码（得到 {text!r}）。")
+    print("   · 识别文本不是 4 位 → 验证码带干扰线，属正常波动，重试即可")
+    print("   · 多次失败 → 可人工核对 img/ 下的历史样本")
     return 2
 
 

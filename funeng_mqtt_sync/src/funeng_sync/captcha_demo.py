@@ -12,7 +12,9 @@ from __future__ import annotations
 from .login_test import (
     CAPTCHA_LENGTH,
     MAX_RETRY,
+    Captcha,
     CaptchaError,
+    build_captcha_url,
     download_and_recognize,
     download_captcha,
     is_valid,
@@ -22,7 +24,9 @@ from .login_test import (
 __all__ = [
     "CAPTCHA_LENGTH",
     "MAX_RETRY",
+    "Captcha",
     "CaptchaError",
+    "build_captcha_url",
     "download_and_recognize",
     "download_captcha",
     "is_valid",
@@ -40,9 +44,10 @@ def main() -> None:
         for p in args:
             print(f"{p} -> {recognize(p)}")
     else:
-        img, text = download_and_recognize()
-        print(f"已下载：{img}")
-        print(f"识别结果 -> {text}")
+        captcha = download_and_recognize()
+        print(f"已下载：{captcha.path}")
+        print(f"识别结果 -> {captcha.code}")
+        print(f"时间戳 key -> {captcha.key}")
 
 
 if __name__ == "__main__":
