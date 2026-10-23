@@ -8,7 +8,7 @@
 
 | 保留 | 说明 |
 |------|------|
-| `captcha_demo.py` | 下载验证码 + ddddocr 离线识别（不断生产网络也能看效果） |
+| `captcha_demo.py` | 下载验证码 + ddddocr 离线识别（转发到 `login_test.py`，含失败重试） |
 | `time_utils.py` | dayjs 等价的时间工具，纯函数，9 条单测覆盖 |
 | `payload.py` | 上报数据体的构造，纯函数，锁住 `T_` 前缀这个易错点 |
 | `demo_config.py` / `demo_import.py` / `demo_stdlib.py` | import 写法、标准库四件套的最小示例 |
@@ -20,7 +20,7 @@
 当前可执行的检查：
 
 ```bash
-.venv/Scripts/python.exe -m pytest tests -q                    # 9 passed
+.venv/Scripts/python.exe -m pytest tests -q                    # 33 passed
 .venv/Scripts/python.exe -m ruff check src scripts tests       # All checks passed
 E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.demo_import
 ```
@@ -45,7 +45,8 @@ src/funeng_sync/
 ├── config.py           # 全局常量（host/topic/MQTT/账号/设备列表/OCR/重试策略）
 ├── time_utils.py       # 毫秒、起止日、整点判断（dayjs 等价）✅ 保留
 ├── payload.py          # 上报数据体构造 ✅ 保留（原来是 http_client.py 的一部分）
-├── captcha_demo.py     # 验证码下载 + ddddocr 识别 ✅ 保留
+├── captcha_demo.py     # 验证码下载 + 识别（转发壳，实现见 login_test.py）✅ 保留
+├── login_test.py       # 验证码下载 + 识别 + 失败重试（实现本体）✅ 保留
 ├── demo_config.py      # import 演示的被导入方
 ├── demo_import.py      # import 三种写法演示
 ├── demo_stdlib.py      # requests/json/datetime/pathlib 四件套演示
@@ -54,8 +55,8 @@ src/funeng_sync/
 ├── sync.py             # ❌ 已删（登录流程 + 取数发布 + 主循环）
 └── main.py             # ❌ 已删（入口）
 
-scripts/check_ocr.py    # OCR 自检（单独验证验证码识别环节）
-tests/                  # time_utils 与 payload 的单测，共 9 条
+scripts/check_ocr.py    # ❌ 已失效（依赖已删的 http_client，改用 login_test.py）
+tests/                  # time_utils / payload / 验证码下载识别与重试的单测，共 33 条
 ```
 
 ## 运行环境（重要）
@@ -73,8 +74,8 @@ run.bat
 ../.py312/python.exe -m funeng_sync.main
 ```
 
-> 老的 `.venv`（3.13）仍保留，只能跑 `OCR_PROVIDER="baidu"` 的在线方案；
-> 跑 `ddddocr` 请必须用 `.py312`。
+> 老的 `.venv`（3.13）仍保留，但**装不了 ddddocr**（OpenCV 没有 3.13 轮子）；
+> 跑验证码识别请必须用 `.py312`。
 
 ## 运行（通用命令）
 
@@ -93,20 +94,47 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m pytest tests -q   # 或 .venv/Scri
 .venv/Scripts/ruff.exe check src scripts
 ```
 
-## 验证码识别自检
+## 验证码下载与识别
 
-单独验证「识别」这一环，不登录、不连 MQTT：
+用 3.12 环境跑（ddddocr 依赖 opencv，Windows 上没有 3.13 轮子）：
 
 ```bash
-E:/workBuddy/pythonStudy/.py312/python.exe scripts/check_ocr.py          # img/ 最新一张
-E:/workBuddy/pythonStudy/.py312/python.exe scripts/check_ocr.py 图.jpg   # 指定图片
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login_test          # 下载 + 识别（失败自动重试）
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login_test img/a.jpg # 只识别指定图片
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.captcha_demo        # 同上，兼容入口
 ```
 
-用百度方案时，输出会先告诉你 AK/SK 能不能换到 token，再告诉你 OCR 接口有没有权限。
+`captcha_demo.py` 是 `login_test.py` 的转发壳，实现只有一份。
+
+### 识别失败会自动重试
+
+验证码固定 **4 位**（`CAPTCHA_LENGTH`）。识别结果长度不对就判定为识别失败
+（多认一个字、少认一个字，或把干扰线认成了字符），**重新下载一张新图再识别**，
+最多 `MAX_RETRY`（默认 5）次：
+
+```
+[1/5] 识别结果长度 3 != 4，判定为识别失败：'ab1'  重新下载再试
+[2/5] 识别成功：Ptq5  (img/captcha_1792756701740015000.jpg)
+```
+
+### 一个坑：服务端返回 JSON 错误时会被当成图片
+
+验证码接口在 Token 失效等情况下会返回 **HTTP 200 + JSON 错误**：
+
+```json
+{"code":20000,"message":"Token不能为空"}
+```
+
+早期版本不校验内容就直接存成 `.jpg`，后果是 ddddocr 报
+`cannot identify image file` —— **报错信息完全指不到真正的原因**。
+现在下载阶段会先按图片魔数（`\xff\xd8\xff` / `\x89PNG` / `GIF8` / `BM` / `RIFF`）校验，
+不是图片就抛 `CaptchaError`，并把服务端的错误信息带出来。
 
 ### 常见错误：`error_code=6 No permission to access data`
 
-含义是「应用没有该接口的权限」，**不是** 识别不准，也不是 AK/SK 无效
+（百度方案的历史记录，当前默认走本地 ddddocr，不涉及此错误。）
+
+含义是「应用没有该接口的权限」，**不是**识别不准，也不是 AK/SK 无效
 （AK/SK 无效会在换 token 那一步就失败）。按顺序排查：
 
 1. 进百度智能云控制台 → **文字识别 OCR** → 应用列表 → 新建/编辑应用，
@@ -118,15 +146,11 @@ E:/workBuddy/pythonStudy/.py312/python.exe scripts/check_ocr.py 图.jpg   # 指�
 
 ### 换识别方案
 
-`config.py` 里两个开关，**两种方案都保留**，改一行即可切换：
+当前只保留**本地离线 ddddocr** 一种方案：它专为验证码训练，无需联网、无需 AK/SK。
+云端 `baidu` 方案随 `http_client.py` 一起裁剪掉了（见下方「已删文件」）。
 
-| 配置 | 可选值 | 说明 |
-|------|--------|------|
-| `OCR_PROVIDER` | `ddddocr`（默认）/ `baidu` | `ddddocr` 本地离线识别，专为验证码训练，无需联网和 AK/SK；`baidu` 走云端在线识别 |
-| `BAIDU_OCR_ENDPOINT` | `general_basic` / `accurate_basic` | 仅 `baidu` 方案生效，高精度版对小图识别率通常更好 |
-
-实测 ddddocr 对现有 5 张验证码样本全部输出 4 位（人工核对约 3/4 完全正确，
-个别把数字 `5` 误读成字母 `b`）；配合登录流程的 5 次重试，成功率足够。
+实测 ddddocr 对现有验证码样本全部输出 4 位（人工核对约 3/4 完全正确，
+个别把数字 `5` 误读成字母 `b`）；配合「识别失败重试」，成功率足够。
 
 ## ⚠️ 安全提示
 

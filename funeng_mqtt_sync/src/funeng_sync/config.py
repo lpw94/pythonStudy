@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # 同一张（过期）验证码，旧时间戳也可能被服务端判定为失效。
 #VERIFY_CODE_URL = "http://www.zghaohua.com:100/VerifyCode"
 
-VERIFY_CODE_URL = "https://admin-api.iemp.fox-energytec.com/authorization-server/no-auth/captcha/graphics?type=png&uuid=5bb9d279-79b4-443a-8273-b94be4b77555"
+#VERIFY_CODE_URL = "https://admin-api.iemp.fox-energytec.com/authorization-server/no-auth/captcha/graphics?type=png&uuid=5bb9d279-79b4-443a-8273-b94be4b77555"
+VERIFY_CODE_URL = "http://10.0.0.1:8080/api/auth/verificationCode/captcha-image/"
 
 # 验证码下载后保存到本地的目录
 IMG_DIR = ROOT / "img"
