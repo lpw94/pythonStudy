@@ -78,8 +78,11 @@ cd E:/workBuddy/pythonStudy/funeng_mqtt_sync
 
 # 启动（推荐，双击也行）—— 跑一次登录流程
 run.bat
+# 或者跑登录 + 取数打印
+run.bat data
 # 或者显式调用
 ../.py312/python.exe -m funeng_sync.login
+../.py312/python.exe -m funeng_sync.meter_data
 ```
 
 > 老的 `.venv`（3.13）仍保留，但**装不了 ddddocr**（OpenCV 没有 3.13 轮子）；
