@@ -36,6 +36,7 @@ from funeng_sync.login_test import (
     MAX_RETRY,
     Captcha,
     CaptchaError,
+    ConfigMissingError,
     download_and_recognize,
 )
 
@@ -105,9 +106,16 @@ def build_login_payload(captcha: Captcha) -> dict[str, Any]:
             "（明文密码的 md5，不是明文本身）"
         )
 
+    try:
+        user_name = config.require_user_name()
+    except config.ConfigError as e:
+        # 配置缺失属于「环境没配好」，不是「凭据不对」——
+        # 归一成 LoginError，调用方只需捕获一种异常。
+        raise LoginError(str(e)) from e
+
     return {
         "key": captcha.key,
-        "loginName": config.USER_NAME,
+        "loginName": user_name,
         "password": config.PASSWORD_MD5,
         "verificationCode": captcha.code,
     }
@@ -152,6 +160,14 @@ def request_token(captcha: Captcha) -> LoginResult:
         LoginError: 请求本身失败（网络异常、响应不是合法 JSON 等）。
     """
     payload = build_login_payload(captcha)
+
+    # 地址缺失时 requests 会抛 MissingSchema("Invalid URL '/api/...'")，
+    # 完全指不到「.env 没写 FUNENG_HOST_URL」。这里先校验一道，
+    # 把「环境没配好」和「服务端报错」区分开。
+    try:
+        config.require_host_url()
+    except config.ConfigError as e:
+        raise LoginError(str(e)) from e
 
     with net.new_session() as session:
         resp = session.post(
@@ -202,6 +218,9 @@ def login(
         except CaptchaError as e:
             last_err = str(e)
             print(f"[{attempt}/{max_retry}] 取验证码失败：{last_err}")
+            if isinstance(e, ConfigMissingError):
+                # 配置没配好，再试多少次都一样，直接中止。
+                raise LoginError(str(e)) from e
             continue
 
         result = request_token(captcha)

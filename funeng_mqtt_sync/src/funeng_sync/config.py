@@ -1,9 +1,16 @@
 """全局配置：服务地址、账号、超时等常量。
 
-敏感值（密码 md5）从项目根目录的 .env 读取，**不写死在本文件里**，
+敏感值全部从项目根目录的 .env 读取，**不写死在本文件里**，
 避免随 git 仓库一起外传（.env 已在 .gitignore 中）。
 
 读取优先级：系统环境变量 > 项目根 .env > 本文件里的默认值。
+
+设计原则：**代码里不出现任何真实的生产地址与账号**。
+- 生产环境地址、登录账号、密码 md5 都属于「知道了就能连上内网服务」的信息，
+  公开仓库里出现等于送上门。
+- 因此下面这些项**没有默认值**——缺失时由 require_*() 显式抛错，
+  而不是悄悄用一个硬编码的值兜底（那正是泄露的源头）。
+- 文档、注释、示例输出里一律用占位符（如 10.0.0.1 / your_account）。
 """
 from __future__ import annotations
 
@@ -12,6 +19,10 @@ from pathlib import Path
 
 # 项目根目录（src/funeng_sync/config.py 往上三级即 funeng_mqtt_sync/）
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class ConfigError(RuntimeError):
+    """缺少必要的配置项（通常是 .env 没写或写漏了）。"""
 
 
 def _load_dotenv(path: Path) -> dict[str, str]:
@@ -47,10 +58,25 @@ def _get(key: str, default: str = "") -> str:
     return os.environ.get(key) or _ENV.get(key, default)
 
 
+def _require(key: str, value: str, hint: str) -> str:
+    """配置项缺失时抛 ConfigError，并给出「去哪填」的明确指引。
+
+    不提供兜底默认值是刻意的：宁可启动失败，也不要用一个写死的
+    生产地址把秘密重新带回版本库。
+    """
+    if not value:
+        raise ConfigError(
+            f"缺少配置项 {key}：请在 {ROOT / '.env'} 中填写{hint}"
+            f"（模板见 {ROOT / '.env.example'}），"
+            f"或设置同名系统环境变量。"
+        )
+    return value
+
+
 # ---------------------------------------------------------------- 网络
 
-# 富能平台服务端（内网直连地址）
-HOST_URL = _get("FUNENG_HOST_URL", "http://10.0.0.1:8080")
+# 生产环境服务端地址（内网直连）。**不设默认值**——真实地址只存在于 .env。
+HOST_URL = _get("FUNENG_HOST_URL").rstrip("/")
 
 # 登录接口：拿验证码 + 密码换 JWT token
 LOGIN_URL = f"{HOST_URL}/api/auth/jwt/token"
@@ -65,16 +91,54 @@ BYPASS_ENV_PROXY = _get("FUNENG_BYPASS_ENV_PROXY", "1") not in ("0", "false", "F
 # 下载验证码的超时时间（秒）
 HTTP_TIMEOUT = int(_get("FUNENG_HTTP_TIMEOUT", "10"))
 
+
 # ---------------------------------------------------------------- 账号
 
-# 登录账号
-USER_NAME = _get("FUNENG_USER_NAME", "your_account")
+# 登录账号。**不设默认值**——真实账号只存在于 .env。
+USER_NAME = _get("FUNENG_USER_NAME")
 
 # 登录密码的 md5 —— 敏感值，只从 .env / 环境变量读，不进版本库。
-# 为空时 login 模块会在真正发请求前抛错，不会带着空密码去打扰服务端。
 PASSWORD_MD5 = _get("FUNENG_PASSWORD_MD5")
+
 
 # ---------------------------------------------------------------- 本地目录
 
 # 验证码下载后保存到本地的目录
 IMG_DIR = ROOT / "img"
+
+
+# ---------------------------------------------------------------- 校验
+
+
+def require_host_url() -> str:
+    """返回服务端地址，未配置时抛 ConfigError。
+
+    单独拎出来是因为地址缺失时的排查方向和密码缺失不同：
+    前者要先确认 .env 存在且写了 FUNENG_HOST_URL。
+    """
+    return _require(
+        "FUNENG_HOST_URL",
+        HOST_URL,
+        "生产服务端地址（形如 http://<内网IP>:<端口>）",
+    )
+
+
+def require_user_name() -> str:
+    """返回登录账号，未配置时抛 ConfigError。"""
+    return _require(
+        "FUNENG_USER_NAME",
+        USER_NAME,
+        "登录账号名",
+    )
+
+
+def require_password_md5() -> str:
+    """返回登录密码的 md5，未配置时抛 ConfigError。
+
+    注意存的是**明文密码的 md5**，不是明文本身。
+    """
+    return _require(
+        "FUNENG_PASSWORD_MD5",
+        PASSWORD_MD5,
+        "登录密码的 md5（不是明文密码）",
+    )

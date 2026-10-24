@@ -2,9 +2,9 @@
 
 把原 Node 脚本 `funeng_api_iemp/node/index.js` 移植成 Python：登录（验证码 OCR）→ 拉取水表小时数据 → 经 MQTT 上报。
 
-## ⚠️ 当前状态：教学练手版（非完整同步脚本）
+## ⚠️ 当前状态：教学练手版（非完整同步脚本），阶段二已收尾
 
-**登录 / 取数 / MQTT 上报的主体流程已在 `0d0dca6` 裁掉**，本项目现在是「项目驱动学Python」阶段二的**练手载体**，只保留了这些可以脱网验证的部分：
+**登录 / 取数 / MQTT 上报的主体流程已在 `0d0dca6` 裁掉**，本项目现在是「项目驱动学 Python」阶段二的**练手载体**，只保留了这些可以脱网验证的部分：
 
 | 保留 | 说明 |
 |------|------|
@@ -14,7 +14,7 @@
 | `payload.py` | 上报数据体的构造，纯函数，锁住 `T_` 前缀这个易错点 |
 | `demo_config.py` / `demo_import.py` / `demo_stdlib.py` | import 写法、标准库四件套的最小示例 |
 | `supervision_demo.py` | 计算机视觉练手（轮廓检测 + 画框） |
-| `config.py` | 配置结构与生产常量（敏感值走 `.env`，**勿外传**） |
+| `config.py` | 配置结构；**所有敏感值走 `.env`，代码里不含真实地址与账号** |
 
 下面「与原 JS 的对应关系」及之后的部分保留了**完整版的移植记录**，作为阶段二的技术存档；其中 `http_client.py` / `mqtt_client.py` / `sync.py` / `main.py` 四个文件**目前并不存在**，要跑完整链路需先补回来。
 
@@ -22,7 +22,8 @@
 
 ```bash
 .venv/Scripts/python.exe -m pytest tests -q                    # 47 passed
-.venv/Scripts/python.exe -m ruff check src tests               # All checks passed
+.venv/Scripts/python.exe -m ruff check src tests scripts        # All checks passed
+.venv/Scripts/python.exe scripts/check_secrets.py              # 敏感信息自查
 E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login
 ```
 
@@ -43,7 +44,7 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login
 
 ```
 src/funeng_sync/
-├── config.py           # 全局常量（host/账号/超时；敏感值走 .env）✅ 保留
+├── config.py           # 全局常量（host/账号/超时；敏感值全走 .env）✅ 保留
 ├── net.py              # HTTP 会话工厂（内网地址绕过企业代理）✅ 保留
 ├── login.py            # 登录换 token（POST /api/auth/jwt/token）✅ 保留
 ├── time_utils.py       # 毫秒、起止日、整点判断（dayjs 等价）✅ 保留
@@ -58,7 +59,8 @@ src/funeng_sync/
 ├── sync.py             # ❌ 已删（登录流程 + 取数发布 + 主循环）
 └── main.py             # ❌ 已删（入口）
 
-scripts/check_ocr.py    # ❌ 已失效（依赖已删的 http_client，改用 login_test.py）
+scripts/check_ocr.py    # OCR 自检（只验证识别环节，不登录）
+scripts/check_secrets.py # 敏感信息自查（扫工作区 + git 历史）
 tests/                  # time_utils / payload / 验证码 / 登录的单测，共 47 条
 ```
 
@@ -90,12 +92,63 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login
 E:/workBuddy/pythonStudy/.py312/python.exe -m pip install ddddocr requests
 ```
 
-## 验证（不触达生产网络）
+## 🔐 敏感配置处理
+
+**这个仓库是公开的**，所以「服务地址 + 账号 + 密码」一律不进版本库。
+
+### 原则：代码里不出现任何真实的生产配置
+
+`config.py` 里这三项**没有默认值**：
+
+| 配置项 | 内容 | 缺配置时的行为 |
+|--------|------|----------------|
+| `FUNENG_HOST_URL` | 生产服务端地址 | `require_host_url()` 抛 `ConfigError` |
+| `FUNENG_USER_NAME` | 登录账号 | `require_user_name()` 抛 `ConfigError` |
+| `FUNENG_PASSWORD_MD5` | 密码的 md5 | `require_password_md5()` 抛 `ConfigError` |
+
+> 刻意不写兜底默认值：宁可启动失败，也不要用一个硬编码的生产地址
+> 把秘密重新带回版本库——**兜底默认值就是泄露的源头**。
+
+读取优先级：**系统环境变量 > 项目根 `.env` > `config.py` 默认值**（仅限非敏感项）。
+
+### 准备步骤
 
 ```bash
-.venv/Scripts/python.exe -m pytest tests -q                    # 47 passed
-.venv/Scripts/python.exe -m ruff check src tests
+copy .env.example .env      # Windows
+# cp .env.example .env      # macOS / Linux
 ```
+
+然后填入真实值。密码填的是 **md5**，不是明文：
+
+```bash
+python -c "import hashlib;print(hashlib.md5(b'你的明文密码').hexdigest())"
+```
+
+### 提交前自查
+
+```bash
+.venv/Scripts/python.exe scripts/check_secrets.py
+```
+
+它做两件事：
+
+1. **扫工作区** —— 用正则匹配内网 IP、32 位 md5、AK/SK、硬编码口令；
+2. **扫 git 历史** —— 用 `git log -S` 反查每个真实值是否曾被提交过。
+
+> **历史是最容易被忽略的泄露面**。`git rm` 只影响当前版本，
+> 提交过的值在 `git log` 里永远还在——而且公开仓库的历史是可以被
+> 任意 clone 下来逐个 commit 翻查的。
+
+### 已做的处理
+
+| 项 | 处理 |
+|----|------|
+| 密码 md5 | 从 `config.py` 移到 `.env`（`.env` 已在 `.gitignore`） |
+| 百度 OCR AK/SK | 方案裁剪后**直接从 `.env` 删除**——没有使用场景却仍是可用凭据 |
+| 内网地址 | `config.py` 改为纯 `.env` 驱动，无默认值 |
+| 登录账号 | 同上 |
+| demo 里的示例地址 | 换成 `10.0.0.1` 这类占位符（demo 本就该脱网） |
+| 文档里的示例输出 | 全部改用占位符 |
 
 ## 登录换 token
 
@@ -108,14 +161,14 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login
 流程与原 Node 脚本一致：**下载验证码 -> 本地识别 -> 带账号密码换 JWT token**。
 
 ```
-下载验证码：http://10.0.0.1:8080/api/auth/verificationCode/captcha-image/1792758014212 -> .../img
+下载验证码：http://<内网IP>:<端口>/api/auth/verificationCode/captcha-image/1792758014212 -> .../img
 [1/5] 识别成功：czye  (.../img/captcha_1792758014212.jpg)
 [1/5] 登录响应 code=0 message='SUCC'
 登录成功
 {
   "code": 0,
   "message": "SUCC",
-  "data": { "token": "...", "name": "your_account", "userId": 1990 }
+  "data": { "token": "...", "name": "<你的账号>", "userId": 1990 }
 }
 ```
 
@@ -159,8 +212,8 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login
 
 ### 坑 4：内网地址必须绕过企业代理
 
-本机设了 `http_proxy`，`requests` 会自动读环境变量代理。而
-`10.0.0.1` 是内网直连地址，走代理时实测会拿到：
+本机设了 `http_proxy`，`requests` 会自动读环境变量代理。而内网地址
+是直连的，走代理时实测会拿到：
 
 - **0 字节**（连接被代理吞掉，`requests` 还不报错，只是空响应）
 - **44 字节的 JSON**（`{"code":20000,"message":"Token不能为空"}`）
@@ -212,14 +265,6 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.captcha_demo        # 
 实测 ddddocr 对现有验证码样本全部输出 4 位（人工核对约 3/4 完全正确，
 个别把数字 `5` 误读成字母 `b`）；配合「识别失败重试」，成功率足够。
 
-## ⚠️ 安全提示
-
-密码 md5 **不写在 `config.py` 里**，而是从项目根目录的 `.env` 读取
-（`FUNENG_PASSWORD_MD5`），`.env` 已在 `.gitignore` 中，不会被提交。
-读取优先级：系统环境变量 > `.env` > `config.py` 里的默认值。
-
-`config.py` 里仍有生产环境地址和登录账号，属于半敏感信息，**勿外传**。
-
 ## 行为要点（与原脚本一致）
 
 - 启动 10 秒后首次登录；之后每 480 分钟（8 小时）一次。
@@ -227,3 +272,18 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.captcha_demo        # 
 - 多设备取数按 `index * 2s` 错峰（delayedLog）。
 - 只对「整点」(`minute === 0`) 的数据点发布到 MQTT。
 - 取数返回 token 失效时，3 秒后自动重新登录。
+
+## 阶段二结语
+
+到登录换 token 为止，阶段二的可验证部分已经收尾：
+
+| 已完成 | 状态 |
+|--------|------|
+| 验证码下载 + 离线识别 | ✅ 含失败自动重试、图片魔数校验 |
+| 登录换 token | ✅ 含 key 绑定、错误分支判定、分类重试 |
+| 敏感配置外置 | ✅ 地址/账号/密码全走 `.env`，附自查脚本 |
+| 单元测试 | ✅ 47 条 |
+| 代码质量 | ✅ ruff 全绿 |
+
+**未做**（属于下一阶段）：取数接口（`Tw-Authorization` + `Cookie`）、MQTT 发布、
+整点过滤与错峰调度、8 小时主循环。

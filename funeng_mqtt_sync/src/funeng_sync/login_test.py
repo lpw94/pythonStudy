@@ -41,6 +41,14 @@ class CaptchaError(RuntimeError):
     """验证码相关错误（下载到非图片内容、识别连续失败等）。"""
 
 
+class ConfigMissingError(CaptchaError):
+    """缺少必要配置（.env 没写地址等）。
+
+    单独一类是因为它**不该重试**：重试不会让配置凭空出现，
+    只会白白消耗 5 次尝试并把日志刷满。调用方应当直接中止。
+    """
+
+
 @dataclass(frozen=True)
 class Captcha:
     """一次成功取到的验证码。
@@ -133,9 +141,20 @@ def download_captcha(
         (图片路径, 时间戳 key)。
 
     Raises:
-        CaptchaError: 服务端返回的不是图片（通常是 JSON 错误，如 Token 失效）。
+        CaptchaError: 服务端返回的不是图片（通常是 JSON 错误，如 Token 失效），
+            或未配置服务端地址。
     """
-    base = url or config.VERIFY_CODE_URL
+    if url is None:
+        # 地址缺失时 requests 会抛 MissingSchema("Invalid URL '/api/...'")，
+        # 完全指不到「.env 没写 FUNENG_HOST_URL」。这里先拦一道。
+        if not config.HOST_URL:
+            raise ConfigMissingError(
+                "未配置服务端地址：请在项目根目录 .env 里设置 FUNENG_HOST_URL"
+                "（生产服务端地址，形如 http://<内网IP>:<端口>）"
+            )
+        base = config.VERIFY_CODE_URL
+    else:
+        base = url
     save_dir = Path(save_dir or config.IMG_DIR)
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -229,6 +248,9 @@ def download_and_recognize(
     for attempt in range(1, max_retry + 1):
         try:
             img, key = download_captcha(save_dir=save_dir)
+        except ConfigMissingError:
+            # 配置缺失重试也没用——直接抛出，别刷 5 遍同样的错。
+            raise
         except CaptchaError as e:
             # 下载失败（多半是 Token 过期这类服务端错误）也算一次尝试，
             # 但换一张图也解决不了——所以只重试不换 URL，等下一次循环重新取。

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 # 不可变常量（str / int / float 等）：from import 后重新赋值不会影响源模块
 APP_NAME: str = "funeng-demo"
+# 这里用示例地址而非真实内网地址：demo 是给人看的教学样例，
+# 不该把生产拓扑带进公开仓库。真实地址在 config.py 里，从 .env 读。
 BASE_URL: str = "http://10.0.0.1:8080"
 TIMEOUT: int = 10
 

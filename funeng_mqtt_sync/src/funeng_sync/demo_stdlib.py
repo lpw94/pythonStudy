@@ -17,7 +17,8 @@ from pathlib import Path
 
 import requests
 
-# 0. 配置（仅示例；真实值在 funeng_sync/config.py）
+# 0. 配置（仅示例；真实值在 funeng_sync/config.py，且从 .env 读）
+# 这里刻意用示例地址：demo 要能离线跑，也不该把生产地址写进公开仓库。
 HOST = "http://10.0.0.1:8080"
 CAPTCHA_URL = f"{HOST}/api/auth/verificationCode/captcha-image/{{ts}}"
 # 图片目录定位到项目根的 img/：__file__ 在 src/funeng_sync/ 下，上溯三级即项目根
