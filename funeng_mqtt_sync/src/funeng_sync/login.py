@@ -73,12 +73,15 @@ class LoginResult:
         code: 业务码，0 表示成功。
         message: 服务端返回的描述。
         token: 成功时的 JWT token，失败为 None。
+        user_id: 服务端返回的用户 ID。取数接口的 Cookie 头里要用它，
+            所以从登录结果里带出来，而不是在代码里写死。
         raw: 服务端的原始响应体。
     """
 
     code: int
     message: str
     token: str | None
+    user_id: str | None
     raw: dict[str, Any]
 
     @property
@@ -138,11 +141,15 @@ def parse_response(body: dict[str, Any]) -> LoginResult:
 
     data = body.get("data")
     token = data.get("token") if isinstance(data, dict) else None
+    # userId 是数字（1990 这种），转成 str 方便直接拼进 Cookie 头
+    raw_user_id = data.get("userId") if isinstance(data, dict) else None
+    user_id = str(raw_user_id) if raw_user_id is not None else None
 
     return LoginResult(
         code=body.get("code"),
         message=body.get("message", ""),
         token=token,
+        user_id=user_id,
         raw=body,
     )
 

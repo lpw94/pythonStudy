@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -100,6 +101,22 @@ USER_NAME = _get("FUNENG_USER_NAME")
 # 登录密码的 md5 —— 敏感值，只从 .env / 环境变量读，不进版本库。
 PASSWORD_MD5 = _get("FUNENG_PASSWORD_MD5")
 
+# 用户 ID。原 Node 脚本里写死在 config 里（"1990"），并拼进 Cookie 头。
+# 但登录接口的响应 data.userId 就会返回它——**从登录结果里取更准**
+# （换账号时不用改代码），所以这里只留一个可选项，用于服务端不返回时兜底。
+USER_ID = _get("FUNENG_USER_ID")
+
+
+# ---------------------------------------------------------------- 设备清单
+
+# 设备列表（对应原 Node 脚本的 optionList）。
+# 每项三个字段：fmAddress（表地址）/ meterId（表号）/ deviceCode（设备编号）。
+#
+# 为什么也走 .env：fmAddress / meterId 是**真实表号**，属于生产业务数据，
+# 公开仓库里出现等于把厂区水表清单送上门——和地址、账号同一性质。
+# 格式用 JSON 数组，一行写完，解析失败会明确报错而不是静默跳过。
+DEVICES_JSON = _get("FUNENG_DEVICES")
+
 
 # ---------------------------------------------------------------- 本地目录
 
@@ -142,3 +159,68 @@ def require_password_md5() -> str:
         PASSWORD_MD5,
         "登录密码的 md5（不是明文密码）",
     )
+
+
+def require_user_id() -> str:
+    """返回用户 ID，未配置时抛 ConfigError。
+
+    仅在服务端登录响应里没带 userId 时才需要兜底；
+    正常路径是从登录结果里取（见 login.LoginResult.user_id）。
+    """
+    return _require(
+        "FUNENG_USER_ID",
+        USER_ID,
+        "用户 ID（一般不需要填，登录响应会返回）",
+    )
+
+
+def require_devices() -> list[dict[str, str]]:
+    """解析设备清单，返回 [{fmAddress, meterId, deviceCode}, ...]。
+
+    从 .env 的 FUNENG_DEVICES 读，格式是一行 JSON 数组::
+
+        FUNENG_DEVICES=[{"fmAddress":"...","meterId":"...","deviceCode":"..."}]
+
+    Returns:
+        设备清单；每项含 fmAddress / meterId / deviceCode 三个键。
+
+    Raises:
+        ConfigError: 未配置、不是合法 JSON、不是数组，或某项缺字段。
+    """
+    if not DEVICES_JSON:
+        raise ConfigError(
+            f"缺少配置项 FUNENG_DEVICES：请在 {ROOT / '.env'} 中填写设备清单"
+            "（JSON 数组，模板见 .env.example）"
+        )
+
+    try:
+        parsed = json.loads(DEVICES_JSON)
+    except json.JSONDecodeError as e:
+        raise ConfigError(
+            f"FUNENG_DEVICES 不是合法 JSON：{e}。"
+            '格式应为 [{"fmAddress":"...","meterId":"...","deviceCode":"..."}]'
+        ) from e
+
+    if not isinstance(parsed, list):
+        raise ConfigError(
+            f"FUNENG_DEVICES 必须是 JSON 数组，实际是 {type(parsed).__name__}"
+        )
+
+    required = ("fmAddress", "meterId", "deviceCode")
+    devices: list[dict[str, str]] = []
+    for index, item in enumerate(parsed):
+        if not isinstance(item, dict):
+            raise ConfigError(
+                f"FUNENG_DEVICES 第 {index + 1} 项不是对象：{item!r}"
+            )
+        missing = [k for k in required if not item.get(k)]
+        if missing:
+            raise ConfigError(
+                f"FUNENG_DEVICES 第 {index + 1} 项缺少字段：{', '.join(missing)}"
+            )
+        devices.append({k: str(item[k]) for k in required})
+
+    if not devices:
+        raise ConfigError("FUNENG_DEVICES 是空数组，没有可取数的设备")
+
+    return devices

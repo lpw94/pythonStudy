@@ -46,11 +46,31 @@ def yesterday_start_millis() -> int:
 def parse_read_time(raw: object) -> datetime:
     """把 readTime 解析成 datetime。
 
-    接口返回的格式有两种：``"2026-10-13 00:00:00"`` 和带 Z 的 ISO 8601，
-    所以先把 Z 换成 +00:00 再交给 fromisoformat。
+    接口返回的 readTime 实测有三种形态：
+
+    1. **毫秒时间戳**（最常见）：``1792800000000``，可能是 int 也可能是字符串；
+    2. ``"2026-10-13 00:00:00"``；
+    3. 带 Z 的 ISO 8601：``"2026-10-13T08:00:00Z"``。
+
+    ⚠️ 第 1 种是**最容易漏掉**的：原 Node 脚本用 ``dayjs(readTime).minute() === 0``
+    判断整点，而 dayjs 接受数字毫秒时间戳。Python 侧若只按 ISO 字符串解析，
+    会走到 except 分支返回 False——**整点过滤全军覆没，一条都不上报**，
+    而且不报错，只是安静地少发数据。
+
+    所以这里必须先认数字，再认字符串。
     """
-    s = str(raw).replace("Z", "+00:00")
-    return datetime.fromisoformat(s)
+    # 毫秒时间戳：int / float，或纯数字字符串
+    if isinstance(raw, bool):  # bool 是 int 的子类，要先排除
+        raise ValueError(f"不是合法的时间：{raw!r}")
+    if isinstance(raw, (int, float)):
+        return datetime.fromtimestamp(raw / 1000)
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        if stripped.isdigit():
+            return datetime.fromtimestamp(int(stripped) / 1000)
+        # 把 Z 换成 +00:00 再交给 fromisoformat
+        return datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+    raise ValueError(f"不是合法的时间：{raw!r}")
 
 
 def is_top_of_hour(raw: object) -> bool:

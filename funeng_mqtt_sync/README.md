@@ -2,29 +2,31 @@
 
 把原 Node 脚本 `funeng_api_iemp/node/index.js` 移植成 Python：登录（验证码 OCR）→ 拉取水表小时数据 → 经 MQTT 上报。
 
-## ⚠️ 当前状态：教学练手版（非完整同步脚本），阶段二已收尾
+## ⚠️ 当前状态：教学练手版（非完整同步脚本），取数阶段已完成
 
-**登录 / 取数 / MQTT 上报的主体流程已在 `0d0dca6` 裁掉**，本项目现在是「项目驱动学 Python」阶段二的**练手载体**，只保留了这些可以脱网验证的部分：
+**登录 / 取数 / MQTT 上报的主体流程已在 `0d0dca6` 裁掉**，本项目现在是「项目驱动学 Python」阶段的**练手载体**，只保留了这些可以脱网验证的部分：
 
 | 保留 | 说明 |
 |------|------|
 | `login.py` | **登录换 token**：拿验证码 -> 识别 -> 调 `/api/auth/jwt/token` |
+| `meter_data.py` | **取数**：带 token 调 `meterRealTimeDataTable`，打印水表读数 |
 | `captcha_demo.py` | 下载验证码 + ddddocr 离线识别（转发到 `login_test.py`，含失败重试） |
-| `time_utils.py` | dayjs 等价的时间工具，纯函数，9 条单测覆盖 |
+| `time_utils.py` | dayjs 等价的时间工具，纯函数，含毫秒时间戳解析 |
 | `payload.py` | 上报数据体的构造，纯函数，锁住 `T_` 前缀这个易错点 |
 | `demo_config.py` / `demo_import.py` / `demo_stdlib.py` | import 写法、标准库四件套的最小示例 |
 | `supervision_demo.py` | 计算机视觉练手（轮廓检测 + 画框） |
-| `config.py` | 配置结构；**所有敏感值走 `.env`，代码里不含真实地址与账号** |
+| `config.py` | 配置结构；**所有敏感值走 `.env`，代码里不含真实地址、账号与表号** |
 
-下面「与原 JS 的对应关系」及之后的部分保留了**完整版的移植记录**，作为阶段二的技术存档；其中 `http_client.py` / `mqtt_client.py` / `sync.py` / `main.py` 四个文件**目前并不存在**，要跑完整链路需先补回来。
+下面「与原 JS 的对应关系」及之后的部分保留了**完整版的移植记录**，作为阶段二的技术存档；其中 `mqtt_client.py` / `sync.py` / `main.py` 三个文件**目前并不存在**，要跑完整链路需先补回来。
 
 当前可执行的检查：
 
 ```bash
-.venv/Scripts/python.exe -m pytest tests -q                    # 47 passed
+.venv/Scripts/python.exe -m pytest tests -q                    # 90 passed
 .venv/Scripts/python.exe -m ruff check src tests scripts        # All checks passed
 .venv/Scripts/python.exe scripts/check_secrets.py              # 敏感信息自查
-E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login      # 只登录
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.meter_data # 登录 + 取数打印
 ```
 
 ---
@@ -44,9 +46,10 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login
 
 ```
 src/funeng_sync/
-├── config.py           # 全局常量（host/账号/超时；敏感值全走 .env）✅ 保留
+├── config.py           # 全局常量（host/账号/设备清单；敏感值全走 .env）✅ 保留
 ├── net.py              # HTTP 会话工厂（内网地址绕过企业代理）✅ 保留
 ├── login.py            # 登录换 token（POST /api/auth/jwt/token）✅ 保留
+├── meter_data.py       # 取数（GET meterRealTimeDataTable）✅ 保留
 ├── time_utils.py       # 毫秒、起止日、整点判断（dayjs 等价）✅ 保留
 ├── payload.py          # 上报数据体构造 ✅ 保留（原来是 http_client.py 的一部分）
 ├── captcha_demo.py     # 验证码下载 + 识别（转发壳，实现见 login_test.py）✅ 保留
@@ -61,7 +64,7 @@ src/funeng_sync/
 
 scripts/check_ocr.py    # OCR 自检（只验证识别环节，不登录）
 scripts/check_secrets.py # 敏感信息自查（扫工作区 + git 历史）
-tests/                  # time_utils / payload / 验证码 / 登录的单测，共 47 条
+tests/                  # time_utils / payload / 验证码 / 登录 / 取数的单测，共 90 条
 ```
 
 ## 运行环境（重要）
@@ -98,18 +101,22 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m pip install ddddocr requests
 
 ### 原则：代码里不出现任何真实的生产配置
 
-`config.py` 里这三项**没有默认值**：
+`config.py` 里这几项**没有默认值**：
 
 | 配置项 | 内容 | 缺配置时的行为 |
 |--------|------|----------------|
 | `FUNENG_HOST_URL` | 生产服务端地址 | `require_host_url()` 抛 `ConfigError` |
 | `FUNENG_USER_NAME` | 登录账号 | `require_user_name()` 抛 `ConfigError` |
 | `FUNENG_PASSWORD_MD5` | 密码的 md5 | `require_password_md5()` 抛 `ConfigError` |
+| `FUNENG_DEVICES` | 设备清单（真实表号） | `require_devices()` 抛 `ConfigError` |
 
 > 刻意不写兜底默认值：宁可启动失败，也不要用一个硬编码的生产地址
 > 把秘密重新带回版本库——**兜底默认值就是泄露的源头**。
 
 读取优先级：**系统环境变量 > 项目根 `.env` > `config.py` 默认值**（仅限非敏感项）。
+
+`FUNENG_USER_ID` 一般不用填——登录响应会返回 `data.userId`，取数时的 Cookie 头
+直接用它；只有服务端不返回时才需要这个兜底项。
 
 ### 准备步骤
 
@@ -122,6 +129,12 @@ copy .env.example .env      # Windows
 
 ```bash
 python -c "import hashlib;print(hashlib.md5(b'你的明文密码').hexdigest())"
+```
+
+设备清单（`FUNENG_DEVICES`）是一行 JSON 数组，真实表号同样不进版本库：
+
+```
+FUNENG_DEVICES=[{"fmAddress":"<表地址>","meterId":"<表号>","deviceCode":"<设备编号>"}]
 ```
 
 ### 提交前自查
@@ -147,6 +160,7 @@ python -c "import hashlib;print(hashlib.md5(b'你的明文密码').hexdigest())"
 | 百度 OCR AK/SK | 方案裁剪后**直接从 `.env` 删除**——没有使用场景却仍是可用凭据 |
 | 内网地址 | `config.py` 改为纯 `.env` 驱动，无默认值 |
 | 登录账号 | 同上 |
+| 设备清单（真实表号） | 同上——`FUNENG_DEVICES` 一行 JSON，只在 `.env` 里 |
 | demo 里的示例地址 | 换成 `10.0.0.1` 这类占位符（demo 本就该脱网） |
 | 文档里的示例输出 | 全部改用占位符 |
 
@@ -265,6 +279,84 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.captcha_demo        # 
 实测 ddddocr 对现有验证码样本全部输出 4 位（人工核对约 3/4 完全正确，
 个别把数字 `5` 误读成字母 `b`）；配合「识别失败重试」，成功率足够。
 
+## 取数（登录 → 拉水表读数）
+
+用 3.12 环境跑（依赖 ddddocr）：
+
+```bash
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.meter_data
+```
+
+实测输出：
+
+```
+[1/5] 识别成功：Nyjw  (.../img/captcha_1792825395306.jpg)
+[1/5] 登录响应 code=0 message='SUCC'
+登录成功，token 前 8 位：CB5451FD…，userId=1990
+
+===== 设备 XT001 =====
+共 129 条读数，其中整点 33 条（上报时只取整点）
+2026-10-24 08:00:00  累计流量=438826.66
+2026-10-24 07:45:00  累计流量=438824.34
+2026-10-24 07:30:00  累计流量=438821.9
+...
+```
+
+接口是 `GET /api/largeCustomer/operationManagement/meterRealTimeDataTable`，
+请求参数与原 JS 逐字对齐：`startDate` / `endDate` / `fmAddress` / `meterId`。
+
+### 坑 1：鉴权要带**两个**地方
+
+```python
+headers = {
+    "Tw-Authorization": token,          # 请求头
+    "Cookie": f"userId={user_id}; userName={user_name}; Tw-Authorization={token};",
+}
+```
+
+token 要同时放进 `Tw-Authorization` 请求头**和** `Cookie` 头里——原脚本两个都带，
+只带一个拿不到数据。`userId` 用**登录响应里的 `data.userId`**（本项目实测返回 `1990`），
+不在代码里写死，换账号时不用改代码。
+
+### 坑 2：时间区间是毫秒时间戳，且默认跨天
+
+`startDate` / `endDate` 传的是**毫秒时间戳字符串**，不是日期字符串。
+默认取「昨天 0 点 → 今天 23:59:59.999」，因为水表读数是**累计值**：
+只查今天会丢掉昨天累积的那部分，报表上的「日用量」就全错了。
+
+### 坑 3：`readTime` 是毫秒时间戳，不是日期字符串
+
+这是本阶段最容易翻车的一个坑。
+
+原 JS 写的是 `dayjs(readTime).minute() === 0`——**dayjs 接受数字毫秒时间戳**。
+而 Python 侧若只按 ISO 字符串解析（`datetime.fromisoformat`），
+会走到 `except` 分支返回 `False`，结果是：
+
+> **整点过滤全军覆没，一条都不上报，而且不报错。**
+
+实测接口返回的 `readTime` 就是 `1792800000000` 这种数字。
+现在 `time_utils.parse_read_time` 三种形态都认：毫秒时间戳（int / 数字字符串）、
+`"2026-10-13 00:00:00"`、带 `Z` 的 ISO 8601。
+
+修复前后对比（同一批数据）：
+
+| | 整点命中 |
+|---|---|
+| 修复前（只按 ISO 解析） | **0 / 129** |
+| 修复后（认毫秒时间戳） | **33 / 129** |
+
+33 条正好对应原 JS 里 `slice(0, 33)` 的设计意图——一天多的整点数据。
+
+### 坑 4：HTTP 200 不代表取数成功
+
+和登录接口一样，服务端所有分支都返回 HTTP 200，业务码在 body 的 `code` 里。
+`code` 非 0 → `TokenExpiredError`（token 失效），与其它错误区分开——
+只有这一类值得重新登录后重试。
+
+### 坑 5：接口会拒绝 python-requests 的默认 UA
+
+取数请求带浏览器 UA（`_BROWSER_UA`），与原脚本的 session 设置一致。
+
 ## 行为要点（与原脚本一致）
 
 - 启动 10 秒后首次登录；之后每 480 分钟（8 小时）一次。
@@ -273,17 +365,15 @@ E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.captcha_demo        # 
 - 只对「整点」(`minute === 0`) 的数据点发布到 MQTT。
 - 取数返回 token 失效时，3 秒后自动重新登录。
 
-## 阶段二结语
-
-到登录换 token 为止，阶段二的可验证部分已经收尾：
+## 阶段小结
 
 | 已完成 | 状态 |
 |--------|------|
 | 验证码下载 + 离线识别 | ✅ 含失败自动重试、图片魔数校验 |
 | 登录换 token | ✅ 含 key 绑定、错误分支判定、分类重试 |
-| 敏感配置外置 | ✅ 地址/账号/密码全走 `.env`，附自查脚本 |
-| 单元测试 | ✅ 47 条 |
+| 取数（meterRealTimeDataTable） | ✅ 含双处鉴权、毫秒时间戳解析、整点统计 |
+| 敏感配置外置 | ✅ 地址/账号/密码/表号全走 `.env`，附自查脚本 |
+| 单元测试 | ✅ 90 条 |
 | 代码质量 | ✅ ruff 全绿 |
 
-**未做**（属于下一阶段）：取数接口（`Tw-Authorization` + `Cookie`）、MQTT 发布、
-整点过滤与错峰调度、8 小时主循环。
+**未做**（属于下一阶段）：MQTT 发布、错峰调度、8 小时主循环。
