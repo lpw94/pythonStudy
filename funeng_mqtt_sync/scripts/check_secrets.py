@@ -156,6 +156,11 @@ def scan_worktree() -> list[tuple[str, str, str]]:
                     continue
                 # 只拿「匹配到的那段文本」去比白名单，而不是整行——
                 # 否则一行里既有示例又有真值时会被误放行。
+                #
+                # 反面写法（曾写过，别这么干）：
+                #     if any(allow in line for allow in ALLOWLIST):
+                #         continue
+                # 整行比对会误放行：一行里既有示例又有真值时，检查就失效了。
                 matched = m.group(0)
                 if matched in ALLOWLIST:
                     continue
