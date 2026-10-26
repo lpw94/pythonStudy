@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31",   # 对标 axios / fetch
     "paho-mqtt>=2.1",   # 对标 mqtt.js
+    "openpyxl>=3.1",    # 导出 Excel（取数结果 -> xlsx）
 ]
 
 [project.scripts]

@@ -9,7 +9,8 @@
 | 保留 | 说明 |
 |------|------|
 | `login.py` | **登录换 token**：拿验证码 -> 识别 -> 调 `/api/auth/jwt/token` |
-| `meter_data.py` | **取数**：带 token 调 `meterRealTimeDataTable`，打印水表读数 |
+| `meter_data.py` | **取数**：带 token 调 `meterRealTimeDataTable`，打印水表读数（`--excel` 可导出） |
+| `excel_export.py` | **导出 Excel**：汇总 / 明细 / 整点数据 / 趋势 四个 sheet |
 | `captcha_demo.py` | 下载验证码 + ddddocr 离线识别（转发到 `login_test.py`，含失败重试） |
 | `time_utils.py` | dayjs 等价的时间工具，纯函数，含毫秒时间戳解析 |
 | `payload.py` | 上报数据体的构造，纯函数，锁住 `T_` 前缀这个易错点 |
@@ -22,11 +23,12 @@
 当前可执行的检查：
 
 ```bash
-.venv/Scripts/python.exe -m pytest tests -q                    # 90 passed
+.venv/Scripts/python.exe -m pytest tests -q                    # 129 passed
 .venv/Scripts/python.exe -m ruff check src tests scripts        # All checks passed
 .venv/Scripts/python.exe scripts/check_secrets.py              # 敏感信息自查
 E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.login      # 只登录
 E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.meter_data # 登录 + 取数打印
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.meter_data --excel  # 再导出 Excel
 ```
 
 ---
@@ -49,7 +51,8 @@ src/funeng_sync/
 ├── config.py           # 全局常量（host/账号/设备清单；敏感值全走 .env）✅ 保留
 ├── net.py              # HTTP 会话工厂（内网地址绕过企业代理）✅ 保留
 ├── login.py            # 登录换 token（POST /api/auth/jwt/token）✅ 保留
-├── meter_data.py       # 取数（GET meterRealTimeDataTable）✅ 保留
+├── meter_data.py       # 取数（GET meterRealTimeDataTable）+ --excel 导出 ✅ 保留
+├── excel_export.py     # 导出 xlsx（汇总/明细/整点数据/趋势）✅ 保留
 ├── time_utils.py       # 毫秒、起止日、整点判断（dayjs 等价）✅ 保留
 ├── payload.py          # 上报数据体构造 ✅ 保留（原来是 http_client.py 的一部分）
 ├── captcha_demo.py     # 验证码下载 + 识别（转发壳，实现见 login_test.py）✅ 保留
@@ -64,7 +67,8 @@ src/funeng_sync/
 
 scripts/check_ocr.py    # OCR 自检（只验证识别环节，不登录）
 scripts/check_secrets.py # 敏感信息自查（扫工作区 + git 历史）
-tests/                  # time_utils / payload / 验证码 / 登录 / 取数的单测，共 90 条
+tests/                  # time_utils / payload / 验证码 / 登录 / 取数 / 导出的单测，共 129 条
+out/                    # 运行产物（Excel 等），已被 .gitignore 忽略
 ```
 
 ## 运行环境（重要）
@@ -360,6 +364,83 @@ token 要同时放进 `Tw-Authorization` 请求头**和** `Cookie` 头里——�
 
 取数请求带浏览器 UA（`_BROWSER_UA`），与原脚本的 session 设置一致。
 
+## 导出 Excel
+
+在取数的基础上加 `--excel`：
+
+```bash
+# 导出到默认路径 out/水表数据_<时间戳>.xlsx
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.meter_data --excel
+
+# 指定路径
+E:/workBuddy/pythonStudy/.py312/python.exe -m funeng_sync.meter_data --excel D:/tmp/water.xlsx
+```
+
+产物有四个 sheet：
+
+| Sheet | 内容 |
+|-------|------|
+| **汇总** | 每台表一行：区间用量、条数、采样粒度、时间跨度、备注 + 用量对比柱状图 |
+| **明细** | 全部读数逐条，含本期用量差值与数据延迟，可筛选 |
+| **整点数据** | 只留整点读数——**下一阶段 MQTT 上报的候选集** |
+| **趋势** | 时间 × 各表累计流量的透视表 + 折线图 |
+
+单列一个「整点数据」sheet，是为了让**上报口径在文件里一眼可见**，
+而不是要读者自己去筛。
+
+> ⚠️ 表里含真实表号与设备编号，属于生产数据。
+> 默认输出到 `out/`，该目录已被 `.gitignore` 忽略，不会进版本库。
+
+### 坑 6：`totalFlux` 是**净值**，会下降
+
+实测恒等式（0 处不符）：
+
+```
+totalFlux == plusTotalFlux - reverseTotalFlux
+```
+
+所以 `totalFlux` 不是单调递增的累计量——某台表 129 条里有 56 次下降，
+因为它存在**反向流量**（`reverseTotalFlux` 在涨）。
+
+**后果**：不能用「末值 - 首值」当总用水量。
+实测某台表正向走了 70.56、反向倒回 32.96，净只剩 37.59——
+只看净值会低估将近一半的过水量。
+
+汇总表因此同时给「区间正向用量」「区间反向用量」「区间净用量」三列，
+并在备注里标注反向占比。
+
+### 坑 7：`flux` 是瞬时流速，不是用量
+
+相邻两条的 `ΔtotalFlux ≈ flux × 0.25`（15 分钟 = 0.25 小时），
+比例接近但不恒定。
+
+**后果**：不能把 `flux` 求和当用量。
+明细表里的「本期用量」一律用**累计量差值**算（服务端返回倒序，
+所以要先按时间升序重排，否则差值符号会全反）。
+
+### 坑 8：采样粒度不统一
+
+4 台表 15 分钟一采，某台表 5 分钟一采（363 条 vs 129 条）。
+
+**后果**：横向对比时不能直接比条数——条数多不代表采得久。
+汇总表因此给「采样间隔(分钟)」列。
+
+### 坑 9：`receiveTime` 是批量补传时间
+
+`receiveTime` 是平台**收到**数据的时间，与 `readTime`（水表读数时间）
+相差最多 7.77 小时，且同一批里几十条读数共用一个 `receiveTime`。
+
+**后果**：这批数据是**补传**的，不是实时上报。
+明细表给「数据延迟(分钟)」列——判断「数据能不能用于实时监控」时必须看它。
+
+### 踩过的坑：备注里的反向流量判定写错过
+
+第一版判定写成 `反向用量 > 净用量`，结果几乎永远不成立：
+反向要超过净，意味着净已经被反向吃光了。
+而真正该提示的场景恰恰是「正向 70 / 反向 33、净还有 37 看着正常」——
+改用**占比**（反向 / 正向 ≥ 10%）才拦得住。
+`tests/test_excel_export.py::TestReverseRatioNote` 是这条的回归测试。
+
 ## 行为要点（与原脚本一致）
 
 - 启动 10 秒后首次登录；之后每 480 分钟（8 小时）一次。
@@ -375,8 +456,9 @@ token 要同时放进 `Tw-Authorization` 请求头**和** `Cookie` 头里——�
 | 验证码下载 + 离线识别 | ✅ 含失败自动重试、图片魔数校验 |
 | 登录换 token | ✅ 含 key 绑定、错误分支判定、分类重试 |
 | 取数（meterRealTimeDataTable） | ✅ 含双处鉴权、毫秒时间戳解析、整点统计 |
+| 导出 Excel | ✅ 四 sheet：汇总 / 明细 / 整点数据 / 趋势 |
 | 敏感配置外置 | ✅ 地址/账号/密码/表号全走 `.env`，附自查脚本 |
-| 单元测试 | ✅ 90 条 |
+| 单元测试 | ✅ 129 条 |
 | 代码质量 | ✅ ruff 全绿 |
 
 **未做**（属于下一阶段）：MQTT 发布、错峰调度、8 小时主循环。

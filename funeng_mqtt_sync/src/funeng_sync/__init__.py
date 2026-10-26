@@ -5,7 +5,8 @@
 - net:            HTTP 会话工厂（内网地址绕过企业代理）
 - login:          登录换 token（POST /api/auth/jwt/token）
 - login_test:     验证码下载 + 本地 OCR 识别（失败自动重试）
-- meter_data:     取数（GET meterRealTimeDataTable）
+- meter_data:     取数（GET meterRealTimeDataTable）+ --excel 导出
+- excel_export:   导出 xlsx（汇总 / 明细 / 整点数据 / 趋势）
 - time_utils:     dayjs 相关的时间处理（毫秒、起止日、整点判断）
 - payload:        上报数据体构造（原 http_client.py 的一部分）
 - mqtt_client:    paho-mqtt 连接与发布      ❌ 已裁剪
@@ -13,4 +14,4 @@
 - main:           入口                        ❌ 已裁剪
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

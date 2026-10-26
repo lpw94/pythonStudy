@@ -35,7 +35,9 @@
 """
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from funeng_sync import config, net
@@ -67,6 +69,10 @@ _BROWSER_UA = (
 
 # 取数的超时比验证码长（原 JS 用的是 15s，验证码用 10s）
 DATA_TIMEOUT = 15
+
+# `--excel` 不带路径时用它占位：走默认输出目录（out/水表数据_<时间戳>.xlsx）。
+# 用一个显式常量而不是 None，是因为 None 已经被「不导出」占用了。
+DEFAULT_EXCEL_FLAG = "__default__"
 
 
 class MeterDataError(RuntimeError):
@@ -356,11 +362,48 @@ def format_rows(rows: list[MeterRow]) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
-    """登录 -> 取数 -> 打印。暂不做 MQTT 上报。"""
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """解析命令行参数。
+
+    Args:
+        argv: 参数列表，None 表示读 sys.argv。
+
+    Returns:
+        解析结果。``excel`` 为 None 表示不导出；
+        为 DEFAULT_EXCEL_FLAG 表示导出到默认路径；否则是指定路径。
+    """
+    parser = argparse.ArgumentParser(
+        prog="funeng_sync.meter_data",
+        description="登录富能平台并拉取水表实时数据（可选导出 Excel）",
+    )
+    parser.add_argument(
+        "--excel",
+        nargs="?",
+        const=DEFAULT_EXCEL_FLAG,
+        default=None,
+        metavar="路径",
+        help=(
+            "导出 Excel。省略路径则写到 out/水表数据_<时间戳>.xlsx。"
+            "注意：表里含真实表号，out/ 已被 .gitignore 忽略。"
+        ),
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    """登录 -> 取数 -> 打印（可选导出 Excel）。
+
+    用法：
+        python -m funeng_sync.meter_data              # 只打印
+        python -m funeng_sync.meter_data --excel      # 打印并导出到 out/
+        python -m funeng_sync.meter_data --excel D:/x.xlsx   # 指定路径
+    """
     # 延迟导入：login 依赖 ddddocr（需要 3.12 环境），放在模块顶层会让
-    # 只用取数功能的人也被迫装 OCR 依赖。
+    # 只用取数功能的人也被迫装 OCR 依赖。excel_export 同理——
+    # openpyxl 是可选依赖，不该因为它没装就让整个模块 import 失败。
     from funeng_sync.login import LoginError, login
+
+    args = _parse_args(argv)
 
     try:
         result = login()
@@ -376,19 +419,21 @@ def main() -> None:
     print(f"登录成功，token 前 8 位：{token[:8]}…，userId={user_id}")
 
     try:
+        device_meta = config.require_devices()
         devices = [
             Device(
                 fm_address=d["fmAddress"],
                 meter_id=d["meterId"],
                 device_code=d["deviceCode"],
             )
-            for d in config.require_devices()
+            for d in device_meta
         ]
     except config.ConfigError as e:
         print(f"设备清单不可用：{e}")
         return
 
     # 共用一个 session：多台表连着查时能复用 TCP 连接。
+    payload: dict[str, list[dict[str, Any]]] = {}
     with net.new_session() as session:
         for device in devices:
             print(f"\n===== 设备 {device.device_code} =====")
@@ -411,6 +456,37 @@ def main() -> None:
                 f"（上报时只取整点）"
             )
             print(format_rows(rows))
+
+            # 导出要的是原始行（除 readTime/totalFlux 外还有正向/反向累计等），
+            # 所以存 raw 而不是重新拼。
+            payload[device.device_code] = [r.raw for r in rows]
+
+    if args.excel is None:
+        return
+
+    # 延迟导入 excel_export：openpyxl 没装时也要能正常跑完取数打印，
+    # 只在真的要导出时才报缺依赖。
+    from funeng_sync.excel_export import (
+        ExportError,
+        default_output_path,
+        export_to_excel,
+    )
+
+    if args.excel == DEFAULT_EXCEL_FLAG:
+        out_path = default_output_path()
+    else:
+        out_path = Path(args.excel)
+    try:
+        saved = export_to_excel(payload, out_path, devices=device_meta)
+    except ExportError as e:
+        print(f"\n导出 Excel 失败：{e}")
+        return
+
+    print(f"\n已导出 Excel：{saved}")
+    print("  汇总     —— 每台表一行：区间用量、条数、采样粒度、备注")
+    print("  明细     —— 全部读数逐条，含本期用量差值，可筛选")
+    print("  整点数据 —— 只留整点读数（MQTT 上报候选集）")
+    print("  趋势     —— 时间 × 各表累计流量透视表 + 折线图")
 
 
 if __name__ == "__main__":
