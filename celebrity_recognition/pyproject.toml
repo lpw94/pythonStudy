@@ -1,0 +1,39 @@
+[project]
+name = "celebrity-recognition"
+version = "0.1.0"
+description = "给一张图片，识别里面的名人明星（YuNet 检测 + CLIP 零样本 + SFace 特征库）"
+requires-python = ">=3.11"
+dependencies = [
+    "opencv-python>=4.8",      # 人脸检测/特征提取（DNN 模块）
+    "numpy>=1.24",
+    "pillow>=10.0",           # 画中文标签
+    "torch>=2.0",             # CLIP 推理
+    "transformers>=4.30",     # CLIP 模型与处理器
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "ruff>=0.4",
+    "pyarrow>=14.0",          # 读取 celebrity-1000 数据集（建库/测试用）
+]
+
+[project.scripts]
+celebrity-recognition = "celebrity_recognition.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

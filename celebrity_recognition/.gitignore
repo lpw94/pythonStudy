@@ -1,0 +1,16 @@
+# 模型文件（600MB+，绝不能进版本库）
+models/
+
+# 测试素材（从 celebrity-1000 数据集导出的 180 张人脸图，是数据集衍生物）
+img/
+
+# 输出目录（标注图）
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
